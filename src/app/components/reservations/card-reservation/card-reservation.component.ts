@@ -129,6 +129,17 @@ export class CardReservationComponent {
     return this.r().preOrder?.orderItems?.length ?? 0;
   });
 
+  readonly canOpenGroupPreOrder = computed(() => {
+    return this.role() === Roles.CUSTOMER && this.r().guestCount >= 2;
+  });
+
+  readonly canEditByClick = computed(() => {
+    return (
+      this.role() === Roles.CUSTOMER &&
+      this.r().status === ReservationStatusCustomer.Reserved
+    );
+  });
+
   readonly canOpenWaiterPreOrder = computed(() => {
     return (
       this.preOrderItemCount() > 0 ||
@@ -173,6 +184,32 @@ export class CardReservationComponent {
       queryParams,
     });
   }
+
+  onGroupPreOrder(): void {
+    void this.router.navigate([
+      '/reservations',
+      this.r().id,
+      'group-order',
+    ]);
+  }
+
+  onCardClick(event: MouseEvent): void {
+    if (!this.canEditByClick() || this.isInteractiveTarget(event.target)) {
+      return;
+    }
+
+    this.editReservation.emit(this.r());
+  }
+
+  onCardKeydown(event: Event): void {
+    if (!this.canEditByClick() || this.isInteractiveTarget(event.target)) {
+      return;
+    }
+
+    event.preventDefault();
+    this.editReservation.emit(this.r());
+  }
+
   onPreOrderWaiter(): void {
     if (this.preOrderItemCount() > 0) {
       this.navigateToWaiterPreOrder();
@@ -235,5 +272,12 @@ export class CardReservationComponent {
     void this.router.navigate(['/waiter-pre-order'], {
       state: navigationData,
     });
+  }
+
+  private isInteractiveTarget(target: EventTarget | null): boolean {
+    return (
+      target instanceof Element &&
+      target.closest('button, a, input, select, textarea, [role="combobox"]') !== null
+    );
   }
 }

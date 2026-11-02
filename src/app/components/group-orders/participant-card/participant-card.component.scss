@@ -1,0 +1,265 @@
+@use 'app/shared/styles/abstracts/colors' as color;
+
+:host {
+  display: block;
+}
+
+.participant-card {
+  padding: 18px 16px 14px;
+  border-radius: 12px;
+  background: color.$neutral-0;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.participant-title {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.text-action {
+  padding: 0 0 4px;
+  border: 0;
+  border-bottom: 1px solid currentColor;
+  color: color.$neutral-900;
+  background: transparent;
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.text-action:hover {
+  color: color.$green-800;
+}
+
+.card-title {
+  margin: 0;
+  color: color.$neutral-900;
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 24px;
+}
+
+.status {
+  flex: 0 0 auto;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.status-submitted {
+  color: color.$green-800;
+  background: color.$green-100;
+}
+
+.status-pending {
+  color: color.$neutral-700;
+  background: color.$orange-100;
+}
+
+.item-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item-row {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  padding: 8px 2px;
+  border-bottom: 1px solid color.$neutral-100;
+}
+
+.item-row.editable {
+  grid-template-columns: 30px 48px minmax(0, 1fr) auto auto;
+}
+
+.dish-remove {
+  display: grid;
+  width: 28px;
+  height: 34px;
+  padding: 3px;
+  place-items: center;
+  border: 0;
+  color: color.$neutral-700;
+  background: transparent;
+  cursor: pointer;
+}
+
+.dish-remove:hover {
+  color: color.$red-400;
+}
+
+.dish-remove svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.dish-image {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.dish-initial {
+  place-items: center;
+  color: color.$green-800;
+  background: color.$green-100;
+  font-size: 16px;
+}
+
+.dish-info p,
+.quantity,
+.item-price {
+  margin: 0;
+}
+
+.dish-name {
+  color: color.$neutral-900;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.dish-weight {
+  color: color.$neutral-600;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.quantity {
+  color: color.$neutral-600;
+  white-space: nowrap;
+}
+
+.quantity-control {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.quantity-value {
+  min-width: 12px;
+  color: color.$neutral-900;
+  text-align: center;
+}
+
+.quantity-button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid color.$neutral-200;
+  border-radius: 8px;
+  color: color.$neutral-600;
+  background: color.$neutral-0;
+  font: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.quantity-increase {
+  border-color: color.$green-600;
+  color: color.$green-800;
+}
+
+.quantity-button:disabled {
+  color: color.$neutral-400;
+  background: color.$neutral-100;
+  cursor: not-allowed;
+}
+
+.item-price {
+  min-width: 68px;
+  color: color.$neutral-900;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.empty-items {
+  margin: 12px 0;
+  color: color.$neutral-600;
+}
+
+.subtotal {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 2px 0;
+  color: color.$neutral-900;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+@media (max-width: 480px) {
+  .participant-card {
+    padding: 16px 12px 14px;
+  }
+
+  .card-header {
+    align-items: flex-start;
+  }
+
+  .participant-title {
+    flex: 1 1 auto;
+  }
+
+  .card-title {
+    font-size: 16px;
+  }
+
+  .item-row {
+    grid-template-columns: 44px minmax(0, 1fr) auto;
+    gap: 7px;
+  }
+
+  .item-row.editable {
+    grid-template-columns: 24px 40px minmax(0, 1fr) auto;
+  }
+
+  .dish-image {
+    width: 40px;
+    height: 40px;
+  }
+
+  .item-price {
+    grid-column: 3 / 5;
+    justify-self: end;
+    margin-top: -8px;
+    font-size: 12px;
+  }
+
+  .quantity-control {
+    justify-content: flex-end;
+  }
+
+  .dish-info {
+    min-width: 0;
+  }
+
+  .card-header {
+    flex-wrap: wrap;
+  }
+}

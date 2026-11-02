@@ -22,6 +22,18 @@ describe('consolidatePreOrder', () => {
     expect(result).toEqual({ items: [{ dish: caesar, quantity: 2 }], total: 360 });
   });
 
+  it('includes the Owner order even before its order status is submitted', () => {
+    const salmon = { id: 'dish3', name: 'Grilled Salmon', price: 18.99 };
+    const owner = { ...guest('Owner', false, [{ dish: salmon, quantity: 1 }]), type: 'Owner' as const };
+    const result = consolidatePreOrder([
+      owner,
+      guest('Lora', true, [{ dish: salmon, quantity: 1 }]),
+    ]);
+
+    expect(result.items).toEqual([{ dish: salmon, quantity: 2 }]);
+    expect(result.total).toBe(37.98);
+  });
+
   it('merges the same dish from different participants', () => {
     const result = consolidatePreOrder([
       guest('Andrii', true, [{ dish: caesar, quantity: 2 }]),

@@ -1,7 +1,27 @@
-<li class="card">
+<li
+  class="card"
+  [class.card--editable]="canEditByClick()"
+  [attr.role]="canEditByClick() ? 'group' : null"
+  [attr.tabindex]="canEditByClick() ? 0 : null"
+  [attr.aria-label]="
+    canEditByClick()
+      ? 'Reservation at ' + r().locationAddress + '. Press Enter to edit.'
+      : null
+  "
+  (click)="onCardClick($event)"
+  (keydown.enter)="onCardKeydown($event)"
+  (keydown.space)="onCardKeydown($event)"
+>
+  @if (role() === Roles.CUSTOMER) {
+    <div [class]="'status-header ' + statusView().class">
+      <span class="status-dot" aria-hidden="true"></span>
+      {{ statusView().label }}
+    </div>
+  }
+
   <div class="details-wrapper">
-    <div class="details-line with-table">
-      <div class="details">
+    <div class="details-line location-line">
+      <span class="details">
         <img
           class="line-icon"
           src="assets/svg/location-green.svg"
@@ -10,7 +30,7 @@
         />
 
         {{ r().locationAddress }}
-      </div>
+      </span>
 
       @if (role() === Roles.WAITER) {
         <div class="change-table">
@@ -25,12 +45,19 @@
         </div>
       }
 
-      @if (role() === Roles.CUSTOMER) {
-        <span
-          [class]="'status-badge ' + statusView().class"
+      @if (
+        role() === Roles.CUSTOMER &&
+        (r().status === ReservationStatusCustomer.Reserved ||
+          r().status === ReservationStatusCustomer.InProgress)
+      ) {
+        <button
+          type="button"
+          class="cancel-icon-button"
+          aria-label="Cancel reservation"
+          (click)="cancelReservation.emit(r().id)"
         >
-          {{ statusView().label }}
-        </span>
+          <img src="assets/svg/trash.svg" alt="" aria-hidden="true" />
+        </button>
       }
     </div>
 
@@ -122,28 +149,21 @@
     </div>
   </div>
 
-  <div class="actions">
+  <div
+    class="actions"
+    [class.customer-actions]="role() === Roles.CUSTOMER"
+  >
     @switch (r().status) {
       @case (ReservationStatusCustomer.Reserved) {
-        <button
-          type="button"
-          class="button button--tertiary button--large"
-          (click)="cancelReservation.emit(r().id)"
-        >
-          Cancel
-        </button>
-
-        @if (role() === Roles.CUSTOMER) {
+        @if (role() === Roles.WAITER) {
           <button
             type="button"
-            class="button button--secondary button--large"
-            (click)="editReservation.emit(r())"
+            class="button button--tertiary button--large"
+            (click)="cancelReservation.emit(r().id)"
           >
-            Edit
+            Cancel
           </button>
-        }
 
-        @if (role() === Roles.WAITER) {
           <button
             type="button"
             class="button button--secondary button--large"
@@ -167,31 +187,40 @@
             class="button button--primary button--large"
             (click)="onPreOrder()"
           >
-            Pre-order
+            Add Pre-Order
           </button>
+
+          @if (canOpenGroupPreOrder()) {
+            <button
+              type="button"
+              class="button button--secondary button--large"
+              (click)="onGroupPreOrder()"
+            >
+              Group Pre-Order
+            </button>
+          }
         }
       }
 
       @case (ReservationStatusCustomer.InProgress) {
-        <button
-          type="button"
-          class="button button--tertiary button--large"
-          (click)="cancelReservation.emit(r().id)"
-        >
-          Cancel
-        </button>
-
-        @if (
-          role() === Roles.WAITER &&
-          canOpenWaiterPreOrder()
-          ) {
+        @if (role() === Roles.WAITER) {
           <button
             type="button"
-            class="button button--primary button--large"
-            (click)="onPreOrderWaiter()"
+            class="button button--tertiary button--large"
+            (click)="cancelReservation.emit(r().id)"
           >
-            Pre-order
+            Cancel
           </button>
+
+          @if (canOpenWaiterPreOrder()) {
+            <button
+              type="button"
+              class="button button--primary button--large"
+              (click)="onPreOrderWaiter()"
+            >
+              Pre-order
+            </button>
+          }
         }
       }
     }
