@@ -19,6 +19,7 @@ export class ParticipantCardComponent {
   readonly isMe = input(false);
   readonly canEdit = input(false);
   readonly canRemove = input(false);
+  readonly dishUpdateInProgress = input(false);
   readonly removeClick = output<Participant>();
   readonly removeDish = output<string>();
   readonly quantityChange = output<ParticipantDishQuantityChange>();

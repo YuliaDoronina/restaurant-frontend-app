@@ -18,6 +18,7 @@ import {
 import { PlaceOrderWaiterComponent } from '@app/components/place-order-waiter/place-order-waiter.component';
 import { Roles } from '@app/shared/constants/roles';
 import { CustomSelectComponent } from '@app/shared/custom-components/custom-select/custom-select.component';
+import { ReservationInviteModalComponent } from '@app/components/reservations/reservation-invite-modal/reservation-invite-modal.component';
 
 interface ReservationStatusView {
   class: string;
@@ -38,6 +39,7 @@ interface WaiterPreOrderNavigationData {
     DatePipe,
     CustomSelectComponent,
     PlaceOrderWaiterComponent,
+    ReservationInviteModalComponent,
   ],
   templateUrl: './card-reservation.component.html',
   styleUrl: './card-reservation.component.scss',
@@ -93,6 +95,7 @@ export class CardReservationComponent {
 
   readonly preOrder = output<CreateOrderRequest>();
   readonly showWaiterOrderModal = signal(false);
+  readonly showInviteModal = signal(false);
 
   readonly statusView = computed<ReservationStatusView>(() => {
     const reservation = this.r();
@@ -131,6 +134,21 @@ export class CardReservationComponent {
 
   readonly canOpenGroupPreOrder = computed(() => {
     return this.role() === Roles.CUSTOMER && this.r().guestCount >= 2;
+  });
+
+  readonly canInviteGuests = computed(() => {
+    const status = this.r().status;
+    return (
+      this.role() === Roles.CUSTOMER &&
+      this.r().guestCount >= 2 &&
+      (status === ReservationStatusCustomer.Reserved ||
+        status === ReservationStatusCustomer.InProgress)
+    );
+  });
+
+  readonly inviteGuestsFull = computed(() => {
+    const currentParticipants = this.r().currentParticipants;
+    return currentParticipants != null && currentParticipants >= this.r().guestCount;
   });
 
   readonly canEditByClick = computed(() => {
@@ -191,6 +209,16 @@ export class CardReservationComponent {
       this.r().id,
       'group-order',
     ]);
+  }
+
+  onInviteGuests(): void {
+    if (this.canInviteGuests() && !this.inviteGuestsFull()) {
+      this.showInviteModal.set(true);
+    }
+  }
+
+  closeInviteModal(): void {
+    this.showInviteModal.set(false);
   }
 
   onCardClick(event: MouseEvent): void {

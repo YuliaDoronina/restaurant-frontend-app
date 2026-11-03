@@ -22,12 +22,23 @@ describe('Рівень 2 · GroupOrdersService', () => {
 
   afterEach(() => http.verify());
 
-  it('getGroupInvite$: reservationId → invite-token → invite', () => {
+  it('getGroupInvite$: loads the owner group context and reservation', () => {
     let groupId = '';
     service.getGroupInvite$('res-1').subscribe((invite) => (groupId = invite.GroupReservationId));
 
-    http.expectOne(`${BASE_URL}/reservations/res-1/invite-token`).flush({ token: 'tok' });
-    http.expectOne(`${BASE_URL}/guest/invites/tok`).flush({ GroupReservationId: 'grp-1' });
+    http
+      .expectOne(`${BASE_URL}/reservations/res-1/guest-session-id`)
+      .flush({ guestSessionId: 'owner-1', groupReservationId: 'grp-1' });
+    http
+      .expectOne(`${BASE_URL}/reservations/res-1`)
+      .flush({
+        tableId: 'table-1',
+        startTime: '2026-10-17T12:00:00Z',
+        endTime: '2026-10-17T14:00:00Z',
+        guestCount: 2,
+        locationAddress: '48 Rustaveli Avenue',
+        restaurantName: 'Green & Tasty',
+      });
 
     expect(groupId).toBe('grp-1');
   });
@@ -61,5 +72,14 @@ describe('Рівень 2 · GroupOrdersService', () => {
     expect(req.request.method).toBe('POST');
     expect(req.request.body).toEqual({ reservationId: 'res-1' });
     req.flush([]);
+  });
+
+  it('updateGroupSessionDish$: PATCHes the owner group-session dish quantity', () => {
+    service.updateGroupSessionDish$('grp-1', 'guest-1', 'dish-1', 2).subscribe();
+
+    const req = http.expectOne(`${BASE_URL}/guest/groups/grp-1/sessions/guest-1/dishes`);
+    expect(req.request.method).toBe('PATCH');
+    expect(req.request.body).toEqual({ dishId: 'dish-1', quantity: 2 });
+    req.flush({ participants: [], total: 0 });
   });
 });

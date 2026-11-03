@@ -41,6 +41,7 @@ export class GroupOrderPageComponent {
   readonly loading = signal(true);
   readonly errorMessage = signal('');
   readonly submitting = signal(false);
+  readonly dishUpdateInProgress = signal(false);
   readonly isRefreshing = signal(false);
   readonly refreshFailed = signal(false);
   readonly lastUpdatedAt = signal<Date | null>(null);
@@ -134,6 +135,10 @@ export class GroupOrderPageComponent {
           this.status.set(status.status);
           this.currentParticipants.set(status.currentParticipants);
           this.maxCapacity.set(status.maxCapacity);
+          this.groupOrders.publishParticipantCount?.(
+            this.reservationId(),
+            status.currentParticipants,
+          );
           this.lastUpdatedAt.set(new Date());
           this.refreshFailed.set(false);
           this.loading.set(false);
@@ -203,38 +208,41 @@ export class GroupOrderPageComponent {
   }
 
   removeDish(participantId: string, dishId: string): void {
-    this.updateParticipants((participant) =>
-      participant.id === participantId
-        ? { ...participant, items: participant.items.filter((item) => item.dish.id !== dishId) }
-        : participant,
-    );
+    this.updateGroupSessionDish(participantId, dishId, 0);
   }
 
   changeDishQuantity(participantId: string, change: ParticipantDishQuantityChange): void {
-    this.updateParticipants((participant) =>
-      participant.id === participantId
-        ? {
-            ...participant,
-            items: participant.items.map((item) =>
-              item.dish.id === change.dishId
-                ? { ...item, quantity: Math.max(1, item.quantity + change.change) }
-                : item,
-            ),
-          }
-        : participant,
-    );
+    const participant = this.participants().find((person) => person.id === participantId);
+    const item = participant?.items.find((orderItem) => orderItem.dish.id === change.dishId);
+    if (!item) return;
+
+    const quantity = item.quantity + change.change;
+    if (quantity < 1) return;
+
+    this.updateGroupSessionDish(participantId, change.dishId, quantity);
   }
 
-  private updateParticipants(update: (participant: Participant) => Participant): void {
-    this.participants.update((participants) =>
-      participants.map((participant) => {
-        const updated = update(participant);
-        return {
-          ...updated,
-          total: updated.items.reduce((total, item) => total + item.dish.price * item.quantity, 0),
-        };
-      }),
-    );
+  private updateGroupSessionDish(participantId: string, dishId: string, quantity: number): void {
+    const groupReservationId = this.invite()?.GroupReservationId;
+    if (!groupReservationId || this.dishUpdateInProgress()) return;
+
+    this.dishUpdateInProgress.set(true);
+    this.groupOrders
+      .updateGroupSessionDish$(groupReservationId, participantId, dishId, quantity)
+      .pipe(
+        takeUntilDestroyed(this.destroyRef),
+        finalize(() => this.dishUpdateInProgress.set(false)),
+      )
+      .subscribe({
+        next: (sessions) => {
+          this.participants.set(sessions.participants);
+          this.lastUpdatedAt.set(new Date());
+          this.refreshFailed.set(false);
+        },
+        error: () => {
+          this.toast.error('Could not update the pre-order. Please try again.');
+        },
+      });
   }
 
   confirmSubmit(): void {
@@ -290,6 +298,10 @@ export class GroupOrderPageComponent {
       tap(({ sessions, status }) => {
         this.participants.set(sessions.participants);
         this.currentParticipants.set(status.currentParticipants);
+        this.groupOrders.publishParticipantCount?.(
+          this.reservationId(),
+          status.currentParticipants,
+        );
         this.maxCapacity.set(status.maxCapacity);
         this.status.set(status.status);
         this.lastUpdatedAt.set(new Date());

@@ -8,19 +8,18 @@
 
 /* Top green reservation strip */
 .reservation-strip {
-    position: sticky;
-    top: 0;
-    z-index: 30;
-
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
 
-    min-height: 44px;
-    padding: 8px 16px;
+    font-size: 1.1rem;
+    min-height: 3.5rem;
+    padding: 0.75rem 1rem;
+    gap: 0.3rem;
 
-    background: color.$green-300;
-    color: color.$neutral-0;
+    background-color: color.$bg-green;
+    color: color.$neutral-900;
 }
 
 /* Centered text with ellipsis */
@@ -28,34 +27,31 @@
     flex: 1;
     text-align: center;
 
-    font-size: 14px;
-    line-height: 20px;
-
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    font-size: 1.1rem;
+    line-height: 1.25rem;
 }
 
 /* Cart icon button in the right corner of the strip */
 .cart-btn {
-    position: absolute;
-    right: 16px;
+  position: absolute;
+  top: -2.9rem;
+  right: 3.95rem;
 
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
 
-    border: 0;
-    background: transparent;
+   border: 0;
+   background: transparent;
     cursor: pointer;
 
-    display: inline-flex;
+   display: inline-flex;
     align-items: center;
     justify-content: center;
 }
 
 .cart-btn img {
-    width: 20px;
-    height: 20px;
+    width: 24px;
+    height: 24px;
 }
 
 .menu-container {
@@ -73,15 +69,18 @@
     a {
         color: inherit;
         text-decoration: none;
-
+        font-size: 1.25rem;
         &:hover {
             text-decoration: underline;
         }
     }
 
     &__location {
-        color: color.$neutral-900;
-        font-weight: 600;
+      font-weight: 600;
+      font-size: 1.4rem;
+      @media (max-width: 560px) {
+        display: inline-block;
+      }
     }
 }
 

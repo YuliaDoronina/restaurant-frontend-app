@@ -1,6 +1,6 @@
 import { HttpClient, HttpContext } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import { catchError, forkJoin, map, Observable, switchMap, throwError } from 'rxjs';
+import { forkJoin, map, Observable, Subject } from 'rxjs';
 import { SKIP_ERROR_TOAST } from '../../auth/skip-error-toast.context';
 import { GroupSessionsResponse } from '../../models/group-orders/group-sessions-response.model';
 import { GroupStatusResponse } from '../../models/group-orders/group-status.model';
@@ -9,7 +9,6 @@ import { SubmittedDish, SubmitGroupPreOrderRequest } from '../../models/group-or
 import { GuestInvite } from '../../models/reservations/guest-invite.model';
 import { ReservationCustomer } from '../../models/reservations/reservation.model';
 import { API_BASE_URL } from '../../shared/config/api-base-url.token';
-import { GuestInviteService } from '../reservation/guest-invite.service';
 
 export interface GroupRequestOptions {
   silent?: boolean;
@@ -19,37 +18,36 @@ export interface GroupRequestOptions {
 export class GroupOrdersService {
   private readonly baseUrl = inject(API_BASE_URL);
   private readonly http = inject(HttpClient);
-  private readonly guestInviteService = inject(GuestInviteService);
+  readonly participantCountUpdates$ = new Subject<{
+    reservationId: string;
+    count: number;
+  }>();
+
+  publishParticipantCount(reservationId: string, count: number): void {
+    this.participantCountUpdates$.next({ reservationId, count });
+  }
 
   getGroupInvite$(reservationId: string): Observable<GuestInvite> {
-    return this.guestInviteService
-      .getInviteToken$(reservationId)
-      .pipe(
-        switchMap(({ token }) => this.guestInviteService.getInvite$(token)),
-        catchError((inviteError: unknown) =>
-          forkJoin({
-            ownerContext: this.http.get<OwnerSessionResponse>(
-              `${this.baseUrl}/reservations/${encodeURIComponent(reservationId)}/guest-session-id`,
-            ),
-            reservation: this.http.get<ReservationCustomer>(
-              `${this.baseUrl}/reservations/${encodeURIComponent(reservationId)}`,
-            ),
-          }).pipe(
-            map(({ ownerContext, reservation }) => ({
-              GroupReservationId: ownerContext.groupReservationId,
-              LocationId: reservation.tableId,
-              RestaurantName: reservation.restaurantName,
-              LocationAddress: reservation.locationAddress,
-              StartTime: reservation.startTime.toString(),
-              EndTime: reservation.endTime.toString(),
-              MaxGuestCount: reservation.guestCount,
-              TableNumber: 0,
-              InviterName: '',
-            })),
-            catchError(() => throwError(() => inviteError)),
-          ),
-        ),
-      );
+    return forkJoin({
+      ownerContext: this.http.get<OwnerSessionResponse>(
+        `${this.baseUrl}/reservations/${encodeURIComponent(reservationId)}/guest-session-id`,
+      ),
+      reservation: this.http.get<ReservationCustomer>(
+        `${this.baseUrl}/reservations/${encodeURIComponent(reservationId)}`,
+      ),
+    }).pipe(
+      map(({ ownerContext, reservation }) => ({
+        GroupReservationId: ownerContext.groupReservationId,
+        LocationId: reservation.tableId,
+        RestaurantName: reservation.restaurantName,
+        LocationAddress: reservation.locationAddress,
+        StartTime: reservation.startTime.toString(),
+        EndTime: reservation.endTime.toString(),
+        MaxGuestCount: reservation.guestCount,
+        TableNumber: 0,
+        InviterName: '',
+      })),
+    );
   }
 
   getSessions$(groupReservationId: string, options: GroupRequestOptions = {}): Observable<GroupSessionsResponse> {
@@ -77,6 +75,18 @@ export class GroupOrdersService {
   removeSession$(groupReservationId: string, guestSessionId: string): Observable<GroupSessionsResponse> {
     return this.http.delete<GroupSessionsResponse>(
       `${this.baseUrl}/guest/groups/${encodeURIComponent(groupReservationId)}/sessions/${encodeURIComponent(guestSessionId)}`,
+    );
+  }
+
+  updateGroupSessionDish$(
+    groupReservationId: string,
+    guestSessionId: string,
+    dishId: string,
+    quantity: number,
+  ): Observable<GroupSessionsResponse> {
+    return this.http.patch<GroupSessionsResponse>(
+      `${this.baseUrl}/guest/groups/${encodeURIComponent(groupReservationId)}/sessions/${encodeURIComponent(guestSessionId)}/dishes`,
+      { dishId, quantity },
     );
   }
 

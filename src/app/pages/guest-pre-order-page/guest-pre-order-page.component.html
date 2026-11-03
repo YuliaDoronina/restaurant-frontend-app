@@ -16,7 +16,7 @@
     <div class="strip-text">
         @if (store.inviteVm(); as vm) {
         You are making a pre-order for the reservation
-        {{ vm.locationAddress }}, {{ vm.tableNumberText }}, {{ vm.timeText }}
+          <strong>{{ vm.locationAddress }}, {{ vm.tableNumberText }}, {{ vm.dateText }}, {{ vm.timeText }}</strong>
         } @else if (store.inviteLoading()) {
         Loading reservation details...
         } @else {

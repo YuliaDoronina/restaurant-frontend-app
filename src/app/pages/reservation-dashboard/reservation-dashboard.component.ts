@@ -25,6 +25,7 @@ import { FeedbackWindowComponent } from '@app/components/reservations/feedback-w
 import { ReservationConfirmedComponent } from '@app/components/reservations/reservation-confirmed/reservation-confirmed.component';
 import { MakeReservationComponent } from '@app/components/tables/make-reservation/make-reservation.component';
 import { FeedbackUpdatedEvent } from '@app/models/feedbacks/feedback.model';
+import { GroupOrdersService } from '@app/services/group-orders/group-orders.service';
 import {
   Reservation,
   ReservationCustomer,
@@ -71,6 +72,8 @@ export class ReservationDashboardComponent implements OnInit {
 
   private readonly reservationService =
     inject(ReservationService);
+  private readonly groupOrdersService =
+    inject(GroupOrdersService);
 
   private readonly tableService = inject(TableService);
   private readonly locationsService = inject(LocationsService);
@@ -149,6 +152,18 @@ export class ReservationDashboardComponent implements OnInit {
     });
 
   ngOnInit(): void {
+    this.groupOrdersService.participantCountUpdates$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(({ reservationId, count }) => {
+        this.reservations.update((reservations) =>
+          reservations.map((reservation) =>
+            reservation.id === reservationId
+              ? { ...reservation, currentParticipants: count }
+              : reservation,
+          ),
+        );
+      });
+
     const token = this.authenticationService.getToken();
     const user = this.authenticationService.getUser();
 

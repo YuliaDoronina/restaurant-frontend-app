@@ -77,6 +77,7 @@
                 [isMe]="person.id === ownerSessionId()"
                 [canEdit]="status() === 'Open'"
                 [canRemove]="person.type === 'Guest' && status() === 'Open'"
+                [dishUpdateInProgress]="dishUpdateInProgress()"
                 (removeDish)="removeDish(person.id, $event)"
                 (quantityChange)="changeDishQuantity(person.id, $event)"
                 (removeClick)="requestRemoveGuest($event)"

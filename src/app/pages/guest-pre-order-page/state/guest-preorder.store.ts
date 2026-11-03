@@ -216,11 +216,32 @@ export class GuestPreorderStore {
             this.menuByCategory.set(res.dishes ?? {});
         } catch (e) {
             console.log('[menu error]', e);
+            if (e instanceof HttpErrorResponse && e.status === 401) {
+                this.clearInvalidSession();
+            }
             this.menuError.set('Failed to load menu');
             this.menuByCategory.set({});
         } finally {
             this.menuLoading.set(false);
         }
+
+    }
+
+    private clearInvalidSession(): void {
+        const contextId = this.contextId();
+        if (contextId) {
+            localStorage.removeItem(this.key(contextId, 'guestName'));
+            localStorage.removeItem(this.key(contextId, 'cart'));
+            localStorage.removeItem(this.key(contextId, 'guestSessionId'));
+            localStorage.removeItem(this.key(contextId, 'guestSessionToken'));
+        }
+
+        this.guestName.set('');
+        this.cartItems.set([]);
+        this.guestSessionId.set(null);
+        this.guestSessionToken.set(null);
+        this.joinError.set(null);
+        this.menuError.set(null);
     }
 
     setGuestName(name: string) {

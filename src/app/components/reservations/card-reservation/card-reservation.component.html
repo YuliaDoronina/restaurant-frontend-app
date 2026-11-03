@@ -61,6 +61,21 @@
       }
     </div>
 
+    @if (canInviteGuests()) {
+      <div class="invite-prompt">
+        <p>Share link with your guests so they can place their pre-orders</p>
+        <button
+          type="button"
+          class="invite-button"
+          [disabled]="inviteGuestsFull()"
+          [attr.title]="inviteGuestsFull() ? 'All guests have already joined' : null"
+          (click)="onInviteGuests()"
+        >
+          Invite Guests
+        </button>
+      </div>
+    }
+
     <div class="details-line">
       <span class="details">
         <img
@@ -184,7 +199,7 @@
         } @else if (role() === Roles.CUSTOMER) {
           <button
             type="button"
-            class="button button--primary button--large"
+            class="button button--secondary button--large flex-fill"
             (click)="onPreOrder()"
           >
             Add Pre-Order
@@ -193,7 +208,7 @@
           @if (canOpenGroupPreOrder()) {
             <button
               type="button"
-              class="button button--secondary button--large"
+              class="button button--primary button--large flex-fill"
               (click)="onGroupPreOrder()"
             >
               Group Pre-Order
@@ -320,5 +335,13 @@
     [customerId]="r().customerId"
     (closeModal)="closeWaiterOrderModal()"
     (placeOrder)="onWaiterOrderCreated($event)"
+  />
+}
+
+@if (showInviteModal()) {
+  <app-reservation-invite-modal
+    [reservation]="r()"
+    [inviteOnly]="true"
+    (closed)="closeInviteModal()"
   />
 }

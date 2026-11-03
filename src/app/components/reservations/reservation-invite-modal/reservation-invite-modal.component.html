@@ -1,4 +1,10 @@
-<app-modal title="Reservation Confirmed" (closed)="onClose()">
+<app-modal [title]="inviteOnly() ? 'Guest Invite Link' : 'Reservation Confirmed'" (closed)="onClose()">
+  @if (inviteOnly()) {
+    <p class="invite-description">
+      Share this link with your guests so they can place their pre-orders
+    </p>
+  }
+
   <dl class="info">
     <div class="info-row">
       <dt>Location</dt>
@@ -48,10 +54,12 @@
     </div>
   }
 
-  <div modal-actions class="actions">
+  @if (!inviteOnly()) {
+    <div modal-actions class="actions">
     <button type="button" class="button button--secondary button--full-width view-reservation-btn" (click)="onViewReservation()">
       View Reservation
     </button>
     <button type="button" class="button button--primary button--full-width pre-order-btn" (click)="onMakePreOrder()">Make Pre-Order</button>
-  </div>
+    </div>
+  }
 </app-modal>
