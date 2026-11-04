@@ -308,13 +308,24 @@ describe('ReservationDashboardComponent', () => {
 
     expect(element.textContent).toContain('reservation-2');
     expect(element.textContent).not.toContain('reservation-1');
-    expect(component.preOrdersLoaded()).toBeFalse();
+    expect(component.preOrdersLoaded()).toBeTrue();
+    expect(component.reservations()[0].hasSubmittedPreOrder).toBeFalse();
 
-    ordersResponse.next([]);
+    ordersResponse.next([
+      {
+        orderId: 'order-2',
+        reservationAddress: 'Test Street 1',
+        reservationTime: '2026-11-04T16:00:00Z',
+        reservationId: 'reservation-2',
+        orderItems: [],
+        status: 3,
+      },
+    ]);
     ordersResponse.complete();
     fixture.detectChanges();
 
     expect(component.preOrdersLoaded()).toBeTrue();
+    expect(component.reservations()[0].hasSubmittedPreOrder).toBeTrue();
   });
 
   it('keeps the existing list when reservations fail and still shows reservations when orders fail', () => {
@@ -347,6 +358,7 @@ describe('ReservationDashboardComponent', () => {
     expect(element.textContent).toContain('reservation-2');
     expect(element.textContent).not.toContain('reservation-1');
     expect(component.preOrdersLoaded()).toBeTrue();
+    expect(component.reservations()[0].hasSubmittedPreOrder).toBeFalse();
     expect(logError).toHaveBeenCalledTimes(2);
   });
 

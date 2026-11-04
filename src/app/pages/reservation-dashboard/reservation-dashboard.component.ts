@@ -507,7 +507,6 @@ export class ReservationDashboardComponent implements OnInit {
 
   private loadReservations(): void {
     let loadedOrders: Order[] | undefined;
-    this.preOrdersLoaded.set(false);
 
     this.reservationService
       .getReservationsForUser$()
