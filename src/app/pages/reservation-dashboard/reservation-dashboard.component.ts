@@ -10,7 +10,18 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
-import { EMPTY, catchError, filter, finalize, forkJoin, map, of, switchMap, tap, timer } from 'rxjs';
+import {
+  EMPTY,
+  catchError,
+  filter,
+  finalize,
+  forkJoin,
+  map,
+  of,
+  switchMap,
+  tap,
+  timer,
+} from 'rxjs';
 
 import { AuthenticationService } from '@app/auth/services/authentication.service';
 import { CardReservationComponent } from '@app/components/reservations/card-reservation/card-reservation.component';
@@ -464,30 +475,32 @@ export class ReservationDashboardComponent implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (feedback) => {
-          this.reservations.update((reservations) =>
-            reservations.map((reservation) =>
-              reservation.id === event.reservationId
-                ? {
-                    ...reservation,
-                    feedback: feedback ?? undefined,
-                  }
-                : reservation
-            )
-          );
-
-          const selected = this.selectedReservation();
-
-          if (selected?.id === event.reservationId) {
-            this.selectedReservation.set({
-              ...selected,
-              feedback: feedback ?? undefined,
-            });
-          }
+          this.updateReservationFeedback(event.reservationId, feedback ?? undefined);
         },
         error: (error) => {
           console.error('Failed to refresh reservation feedback:', error);
         },
       });
+  }
+
+  private updateReservationFeedback(
+    reservationId: string,
+    feedback: ReservationCustomer['feedback']
+  ): void {
+    this.reservations.update((reservations) =>
+      reservations.map((reservation) =>
+        reservation.id === reservationId ? { ...reservation, feedback } : reservation
+      )
+    );
+
+    const selected = this.selectedReservation();
+
+    if (selected?.id === reservationId) {
+      this.selectedReservation.set({
+        ...selected,
+        feedback,
+      });
+    }
   }
 
   private loadReservations(): void {
@@ -496,43 +509,24 @@ export class ReservationDashboardComponent implements OnInit {
       orders: this.ordersService.getPreOrders(),
     })
       .pipe(
-        switchMap(({ reservations, orders }) => {
-          if (reservations.length === 0) {
-            return of<ReservationCustomer[]>([]);
-          }
-
-          return forkJoin(
-            reservations.map((reservation) =>
-              this.reservationService.getReservationFeedback(reservation.id).pipe(
-                catchError((error: HttpErrorResponse) => {
-                  if (error.status !== 404) {
-                    console.error(
-                      `Failed to load feedback for reservation ${reservation.id}:`,
-                      error
-                    );
-                  }
-
-                  return of(null);
-                }),
-                map((feedback): ReservationCustomer => {
-                  const preOrder = orders.find((order) => order.reservationId === reservation.id);
-
-                  const hasFeedback =
-                    feedback?.service != null || feedback?.cuisineExperience != null;
-
-                  return {
-                    ...reservation,
-                    status: reservation.status as unknown as ReservationStatusCustomer,
-                    restaurantName: reservation.restaurantName ?? '',
-                    feedback: hasFeedback ? (feedback ?? undefined) : undefined,
-                    preOrder,
-                    hasSubmittedPreOrder:
-                      preOrder != null && (preOrder.status === 1 || preOrder.status === 3),
-                  };
-                })
-              )
-            )
+        map(({ reservations, orders }) => {
+          const existingFeedback = new Map(
+            this.reservations().map((reservation) => [reservation.id, reservation.feedback])
           );
+
+          return reservations.map((reservation): ReservationCustomer => {
+            const preOrder = orders.find((order) => order.reservationId === reservation.id);
+
+            return {
+              ...reservation,
+              status: reservation.status as unknown as ReservationStatusCustomer,
+              restaurantName: reservation.restaurantName ?? '',
+              feedback: existingFeedback.get(reservation.id),
+              preOrder,
+              hasSubmittedPreOrder:
+                preOrder != null && (preOrder.status === 1 || preOrder.status === 3),
+            };
+          });
         }),
         finalize(() => {
           this.reservationsLoaded.set(true);
@@ -542,11 +536,37 @@ export class ReservationDashboardComponent implements OnInit {
       .subscribe({
         next: (reservations) => {
           this.reservations.set(reservations);
+          this.loadFeedbackInBackground(reservations);
         },
         error: (error) => {
           console.error('Failed to load reservations:', error);
         },
       });
+  }
+
+  private loadFeedbackInBackground(reservations: ReservationCustomer[]): void {
+    reservations.forEach((reservation) => {
+      this.reservationService
+        .getReservationFeedback(reservation.id)
+        .pipe(
+          catchError((error: HttpErrorResponse) => {
+            if (error.status !== 404) {
+              console.error(`Failed to load feedback for reservation ${reservation.id}:`, error);
+            }
+
+            return EMPTY;
+          }),
+          takeUntilDestroyed(this.destroyRef)
+        )
+        .subscribe((feedback) => {
+          const hasFeedback = feedback?.service != null || feedback?.cuisineExperience != null;
+
+          this.updateReservationFeedback(
+            reservation.id,
+            hasFeedback ? (feedback ?? undefined) : undefined
+          );
+        });
+    });
   }
 
   private extractTableNumber(tableName: string | undefined): number {

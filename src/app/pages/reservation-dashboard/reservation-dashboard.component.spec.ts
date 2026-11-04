@@ -1,7 +1,15 @@
-import { ComponentFixture, TestBed, discardPeriodicTasks, fakeAsync, tick } from '@angular/core/testing';
+import {
+  ComponentFixture,
+  TestBed,
+  discardPeriodicTasks,
+  fakeAsync,
+  tick,
+} from '@angular/core/testing';
+import { HttpErrorResponse } from '@angular/common/http';
 import { WritableSignal, signal } from '@angular/core';
 import { NavigationEnd, Router, Event as RouterEvent } from '@angular/router';
 import { Reservation, ReservationStatus } from '@app/models/reservations/reservation.model';
+import { FeedbackReservationResponseItem } from '@app/models/feedbacks/feedback-reservation-response-item.model';
 import { Notification } from '@app/models/notifications/notification.model';
 import { AuthenticationService } from '@app/auth/services/authentication.service';
 import {
@@ -33,6 +41,23 @@ function makeReservation(id: string): Reservation {
     restaurantName: 'Test Restaurant',
     guestInviteLinkAvailable: true,
     currentParticipants: 1,
+  };
+}
+
+function makeFeedback(reservationId: string): FeedbackReservationResponseItem {
+  const feedbackItem = {
+    userId: 'customer-1',
+    locationId: 'location-1',
+    reservationId,
+    username: 'Test Customer',
+    rating: 5,
+    comment: 'Great experience',
+    createdAt: '2026-11-04T16:00:00Z',
+  };
+
+  return {
+    service: { ...feedbackItem, type: 'service' },
+    cuisineExperience: { ...feedbackItem, type: 'cuisine' },
   };
 }
 
@@ -69,9 +94,9 @@ describe('ReservationDashboardComponent', () => {
     navigationEvents = new Subject<RouterEvent>();
     reservationUpdates = new Subject<ReservationGroupUpdate>();
     unreadNotifications = signal<Notification[]>([]);
-    loadNotifications = jasmine.createSpy('loadNotifications').and.returnValue(
-      of([]).pipe(tap((notifications) => unreadNotifications.set(notifications)))
-    );
+    loadNotifications = jasmine
+      .createSpy('loadNotifications')
+      .and.returnValue(of([]).pipe(tap((notifications) => unreadNotifications.set(notifications))));
     getStatusByReservationId = jasmine
       .createSpy('getStatusByReservationId$')
       .and.returnValue(of({ currentParticipants: 2, maxCapacity: 2, status: 'Open' as const }));
@@ -84,9 +109,7 @@ describe('ReservationDashboardComponent', () => {
     );
     reservationService.getReservationFeedback.and.returnValue(of(null));
 
-    preOrdersService = jasmine.createSpyObj<PreOrdersService>('PreOrdersService', [
-      'getPreOrders',
-    ]);
+    preOrdersService = jasmine.createSpyObj<PreOrdersService>('PreOrdersService', ['getPreOrders']);
     preOrdersService.getPreOrders.and.returnValue(of([]));
 
     await TestBed.configureTestingModule({
@@ -155,9 +178,7 @@ describe('ReservationDashboardComponent', () => {
 
   it('shows the initial loading state until the first request completes', () => {
     const reservationsResponse = new Subject<Reservation[]>();
-    reservationService.getReservationsForUser$.and.returnValue(
-      reservationsResponse.asObservable()
-    );
+    reservationService.getReservationsForUser$.and.returnValue(reservationsResponse.asObservable());
     const element = createDashboard();
 
     expect(element.textContent).toContain('Please wait while we load your reservations.');
@@ -170,13 +191,78 @@ describe('ReservationDashboardComponent', () => {
     expect(element.textContent).not.toContain('Please wait while we load your reservations.');
   });
 
+  it('renders reservations before feedback requests complete and updates only the matching reservation', () => {
+    const feedbackResponses = new Map([
+      ['reservation-1', new Subject<FeedbackReservationResponseItem | null>()],
+      ['reservation-2', new Subject<FeedbackReservationResponseItem | null>()],
+    ]);
+    reservationService.getReservationsForUser$.and.returnValue(
+      of([makeReservation('reservation-1'), makeReservation('reservation-2')])
+    );
+    reservationService.getReservationFeedback.and.callFake((reservationId) =>
+      feedbackResponses.get(reservationId)!.asObservable()
+    );
+
+    const element = createDashboard();
+
+    expect(component.reservationsLoaded()).toBeTrue();
+    expect(element.querySelectorAll('.reservation-list li').length).toBe(2);
+    expect(element.textContent).toContain('reservation-1');
+    expect(element.textContent).toContain('reservation-2');
+    expect(
+      component.reservations().find((reservation) => reservation.id === 'reservation-1')?.feedback
+    ).toBeUndefined();
+
+    feedbackResponses.get('reservation-2')!.next(makeFeedback('reservation-2'));
+
+    expect(
+      component.reservations().find((reservation) => reservation.id === 'reservation-2')?.feedback
+        ?.service.reservationId
+    ).toBe('reservation-2');
+    expect(
+      component.reservations().find((reservation) => reservation.id === 'reservation-1')?.feedback
+    ).toBeUndefined();
+    expect(
+      component.reservations().find((reservation) => reservation.id === 'reservation-2')
+        ?.currentParticipants
+    ).toBe(1);
+  });
+
+  it('keeps reservations visible and updates other feedback when one feedback request fails', () => {
+    const feedbackResponse = new Subject<FeedbackReservationResponseItem | null>();
+    const logError = spyOn(console, 'error');
+    reservationService.getReservationsForUser$.and.returnValue(
+      of([makeReservation('reservation-1'), makeReservation('reservation-2')])
+    );
+    reservationService.getReservationFeedback.and.callFake((reservationId) =>
+      reservationId === 'reservation-1'
+        ? throwError(() => new HttpErrorResponse({ status: 500 }))
+        : feedbackResponse.asObservable()
+    );
+
+    const element = createDashboard();
+
+    expect(component.reservationsLoaded()).toBeTrue();
+    expect(element.querySelectorAll('.reservation-list li').length).toBe(2);
+    expect(logError).toHaveBeenCalledOnceWith(
+      'Failed to load feedback for reservation reservation-1:',
+      jasmine.any(HttpErrorResponse)
+    );
+
+    feedbackResponse.next(makeFeedback('reservation-2'));
+
+    expect(
+      component.reservations().find((reservation) => reservation.id === 'reservation-2')?.feedback
+        ?.service.reservationId
+    ).toBe('reservation-2');
+    expect(element.querySelectorAll('.reservation-list li').length).toBe(2);
+  });
+
   it('keeps the existing list visible during refresh and replaces it on success', () => {
     const element = createDashboard();
     const reservationsResponse = new Subject<Reservation[]>();
     const ordersResponse = new Subject<Order[]>();
-    reservationService.getReservationsForUser$.and.returnValue(
-      reservationsResponse.asObservable()
-    );
+    reservationService.getReservationsForUser$.and.returnValue(reservationsResponse.asObservable());
     preOrdersService.getPreOrders.and.returnValue(ordersResponse.asObservable());
 
     returnFromGroupOrder();
@@ -279,8 +365,7 @@ describe('ReservationDashboardComponent', () => {
       isRead: false,
     };
     loadNotifications.and.callFake(() => {
-      const notifications =
-        loadNotifications.calls.count() === 1 ? [] : [submittedNotification];
+      const notifications = loadNotifications.calls.count() === 1 ? [] : [submittedNotification];
       return of(notifications).pipe(tap(() => unreadNotifications.set(notifications)));
     });
 
@@ -301,10 +386,7 @@ describe('ReservationDashboardComponent', () => {
     fixture.detectChanges();
 
     expect(loadNotifications).toHaveBeenCalledTimes(2);
-    expect(getStatusByReservationId).toHaveBeenCalledOnceWith(
-      'reservation-1',
-      { silent: true }
-    );
+    expect(getStatusByReservationId).toHaveBeenCalledOnceWith('reservation-1', { silent: true });
     expect(component.hasUnreadReservationUpdates('reservation-1')).toBeTrue();
     expect(
       component.reservations().find((reservation) => reservation.id === 'reservation-1')
