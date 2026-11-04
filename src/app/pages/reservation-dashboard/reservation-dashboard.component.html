@@ -15,6 +15,7 @@
         [r]="reservation"
         [role]="role()"
         [statusEnum]="statusEnum"
+        [preOrderStatusLoaded]="preOrdersLoaded()"
         [hasUnreadReservationUpdates]="hasUnreadReservationUpdates(reservation.id)"
         (cancelReservation)="cancelReservation($event)"
         (editReservation)="openEditModal($event)"

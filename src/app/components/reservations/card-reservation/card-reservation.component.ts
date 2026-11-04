@@ -54,6 +54,7 @@ export class CardReservationComponent {
   readonly role = input<string>(Roles.CUSTOMER);
   readonly statusEnum = input<Record<number, ReservationStatusView>>({});
   readonly hasUnreadReservationUpdates = input(false);
+  readonly preOrderStatusLoaded = input(true);
 
   readonly availableTableOptions = input<string[]>([]);
 
@@ -125,6 +126,7 @@ export class CardReservationComponent {
     const status = this.r().status;
     return (
       this.role() === Roles.CUSTOMER &&
+      this.preOrderStatusLoaded() &&
       !this.r().hasSubmittedPreOrder &&
       this.r().guestCount >= 2 &&
       (status === ReservationStatusCustomer.Reserved ||

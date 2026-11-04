@@ -228,6 +228,36 @@ describe('ReservationDashboardComponent', () => {
     ).toBe(1);
   });
 
+  it('renders reservations before pre-orders complete and merges them when they arrive', () => {
+    const ordersResponse = new Subject<Order[]>();
+    reservationService.getReservationsForUser$.and.returnValue(
+      of([makeReservation('reservation-1')])
+    );
+    preOrdersService.getPreOrders.and.returnValue(ordersResponse.asObservable());
+
+    const element = createDashboard();
+
+    expect(component.reservationsLoaded()).toBeTrue();
+    expect(component.preOrdersLoaded()).toBeFalse();
+    expect(element.querySelectorAll('.reservation-list li').length).toBe(1);
+    expect(component.reservations()[0].preOrder).toBeUndefined();
+
+    const order: Order = {
+      orderId: 'order-1',
+      reservationAddress: 'Test Street 1',
+      reservationTime: '2026-11-04T16:00:00Z',
+      reservationId: 'reservation-1',
+      orderItems: [],
+      status: 3,
+    };
+    ordersResponse.next([order]);
+    fixture.detectChanges();
+
+    expect(component.preOrdersLoaded()).toBeTrue();
+    expect(component.reservations()[0].preOrder).toEqual(order);
+    expect(component.reservations()[0].hasSubmittedPreOrder).toBeTrue();
+  });
+
   it('keeps reservations visible and updates other feedback when one feedback request fails', () => {
     const feedbackResponse = new Subject<FeedbackReservationResponseItem | null>();
     const logError = spyOn(console, 'error');
@@ -258,7 +288,7 @@ describe('ReservationDashboardComponent', () => {
     expect(element.querySelectorAll('.reservation-list li').length).toBe(2);
   });
 
-  it('keeps the existing list visible during refresh and replaces it on success', () => {
+  it('replaces reservations during refresh before the pre-orders request completes', () => {
     const element = createDashboard();
     const reservationsResponse = new Subject<Reservation[]>();
     const ordersResponse = new Subject<Order[]>();
@@ -274,15 +304,20 @@ describe('ReservationDashboardComponent', () => {
 
     reservationsResponse.next([makeReservation('reservation-2')]);
     reservationsResponse.complete();
-    ordersResponse.next([]);
-    ordersResponse.complete();
     fixture.detectChanges();
 
     expect(element.textContent).toContain('reservation-2');
     expect(element.textContent).not.toContain('reservation-1');
+    expect(component.preOrdersLoaded()).toBeFalse();
+
+    ordersResponse.next([]);
+    ordersResponse.complete();
+    fixture.detectChanges();
+
+    expect(component.preOrdersLoaded()).toBeTrue();
   });
 
-  it('keeps the entire existing list when either refresh request fails', () => {
+  it('keeps the existing list when reservations fail and still shows reservations when orders fail', () => {
     const element = createDashboard();
     const logError = spyOn(console, 'error');
 
@@ -307,10 +342,11 @@ describe('ReservationDashboardComponent', () => {
     fixture.detectChanges();
 
     expect(component.reservations().map((reservation) => reservation.id)).toEqual([
-      'reservation-1',
+      'reservation-2',
     ]);
-    expect(element.textContent).toContain('reservation-1');
-    expect(element.textContent).not.toContain('reservation-2');
+    expect(element.textContent).toContain('reservation-2');
+    expect(element.textContent).not.toContain('reservation-1');
+    expect(component.preOrdersLoaded()).toBeTrue();
     expect(logError).toHaveBeenCalledTimes(2);
   });
 

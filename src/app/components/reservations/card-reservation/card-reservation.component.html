@@ -166,6 +166,8 @@
             <button
               type="button"
               class="button button--secondary button--large flex-fill"
+              [disabled]="!preOrderStatusLoaded()"
+              [attr.title]="!preOrderStatusLoaded() ? 'Checking pre-order status' : null"
               (click)="onPreOrder()"
             >
               Add Pre-Order

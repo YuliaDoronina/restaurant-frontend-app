@@ -149,6 +149,24 @@ describe('CardReservationComponent', () => {
     );
   });
 
+  it('disables pre-order actions until pre-order status has loaded', () => {
+    fixture.componentRef.setInput('preOrderStatusLoaded', false);
+    fixture.detectChanges();
+
+    const addPreOrderButton = [...fixture.nativeElement.querySelectorAll('button')].find(
+      (button: HTMLButtonElement) => button.textContent?.trim() === 'Add Pre-Order'
+    ) as HTMLButtonElement;
+
+    expect(addPreOrderButton.disabled).toBeTrue();
+    expect(fixture.nativeElement.querySelector('.invite-prompt')).toBeNull();
+
+    fixture.componentRef.setInput('preOrderStatusLoaded', true);
+    fixture.detectChanges();
+
+    expect(addPreOrderButton.disabled).toBeFalse();
+    expect(fixture.nativeElement.querySelector('.invite-prompt')).not.toBeNull();
+  });
+
   it('hides reservation mutations and guest invites after pre-order submission but keeps group review', () => {
     fixture.componentRef.setInput('r', {
       ...RESERVATION,

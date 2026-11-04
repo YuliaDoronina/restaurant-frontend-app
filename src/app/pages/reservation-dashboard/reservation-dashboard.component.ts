@@ -30,6 +30,7 @@ import { ReservationConfirmedComponent } from '@app/components/reservations/rese
 import { MakeReservationComponent } from '@app/components/tables/make-reservation/make-reservation.component';
 import { FeedbackUpdatedEvent } from '@app/models/feedbacks/feedback.model';
 import { Notification } from '@app/models/notifications/notification.model';
+import { Order } from '@app/models/orders/order.model';
 import { GroupOrdersService } from '@app/services/group-orders/group-orders.service';
 import { NotificationsService } from '@app/services/notifications/notifications.service';
 import {
@@ -95,6 +96,7 @@ export class ReservationDashboardComponent implements OnInit {
 
   readonly reservations = signal<ReservationCustomer[]>([]);
   readonly reservationsLoaded = signal(false);
+  readonly preOrdersLoaded = signal(false);
 
   readonly selectedReservation = signal<ReservationCustomer | null>(null);
 
@@ -504,27 +506,28 @@ export class ReservationDashboardComponent implements OnInit {
   }
 
   private loadReservations(): void {
-    forkJoin({
-      reservations: this.reservationService.getReservationsForUser$(),
-      orders: this.ordersService.getPreOrders(),
-    })
+    let loadedOrders: Order[] | undefined;
+    this.preOrdersLoaded.set(false);
+
+    this.reservationService
+      .getReservationsForUser$()
       .pipe(
-        map(({ reservations, orders }) => {
-          const existingFeedback = new Map(
-            this.reservations().map((reservation) => [reservation.id, reservation.feedback])
+        map((reservations) => {
+          const existingReservations = new Map(
+            this.reservations().map((reservation) => [reservation.id, reservation])
           );
 
           return reservations.map((reservation): ReservationCustomer => {
-            const preOrder = orders.find((order) => order.reservationId === reservation.id);
+            const existing = existingReservations.get(reservation.id);
 
             return {
               ...reservation,
               status: reservation.status as unknown as ReservationStatusCustomer,
               restaurantName: reservation.restaurantName ?? '',
-              feedback: existingFeedback.get(reservation.id),
-              preOrder,
+              feedback: existing?.feedback,
+              preOrder: existing?.preOrder,
               hasSubmittedPreOrder:
-                preOrder != null && (preOrder.status === 1 || preOrder.status === 3),
+                existing?.hasSubmittedPreOrder ?? reservation.hasSubmittedPreOrder ?? false,
             };
           });
         }),
@@ -535,13 +538,49 @@ export class ReservationDashboardComponent implements OnInit {
       )
       .subscribe({
         next: (reservations) => {
-          this.reservations.set(reservations);
-          this.loadFeedbackInBackground(reservations);
+          const reservationsWithOrders =
+            loadedOrders === undefined
+              ? reservations
+              : this.mergePreOrders(reservations, loadedOrders);
+          this.reservations.set(reservationsWithOrders);
+          this.loadFeedbackInBackground(reservationsWithOrders);
         },
         error: (error) => {
           console.error('Failed to load reservations:', error);
         },
       });
+
+    this.ordersService
+      .getPreOrders()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (orders) => {
+          loadedOrders = orders;
+          this.preOrdersLoaded.set(true);
+          this.reservations.update((reservations) => this.mergePreOrders(reservations, orders));
+        },
+        error: (error) => {
+          console.error('Failed to load reservation pre-orders:', error);
+          this.preOrdersLoaded.set(true);
+        },
+      });
+  }
+
+  private mergePreOrders(
+    reservations: ReservationCustomer[],
+    orders: Order[]
+  ): ReservationCustomer[] {
+    const ordersByReservationId = new Map(orders.map((order) => [order.reservationId, order]));
+
+    return reservations.map((reservation) => {
+      const preOrder = ordersByReservationId.get(reservation.id);
+
+      return {
+        ...reservation,
+        preOrder,
+        hasSubmittedPreOrder: preOrder != null && (preOrder.status === 1 || preOrder.status === 3),
+      };
+    });
   }
 
   private loadFeedbackInBackground(reservations: ReservationCustomer[]): void {
