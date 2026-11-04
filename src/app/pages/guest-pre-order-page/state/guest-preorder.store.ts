@@ -8,6 +8,8 @@ import { GuestSessionsService } from '@app/services/guest-sessions/guest-session
 
 const GUEST_LIMIT_MESSAGE =
   'This invitation has reached its guest limit. Please ask the reservation owner to free a guest spot, then try again.';
+const INVALID_GUEST_SESSION_MESSAGE =
+  'Your guest session is no longer active. Please reopen the invitation link to rejoin the group pre-order.';
 
 export type GuestPreorderStatus = 'active' | 'submitted';
 
@@ -54,6 +56,7 @@ export class GuestPreorderStore {
   readonly menuError = signal<string | null>(null);
   readonly cartBusy = signal(false);
   readonly cartError = signal<string | null>(null);
+  readonly sessionExpiredMessage = signal<string | null>(null);
 
   readonly menuByCategory = signal<Record<string, GuestMenuDish[]>>({});
   readonly menuCategories = computed(() => Object.keys(this.menuByCategory()));
@@ -83,6 +86,7 @@ export class GuestPreorderStore {
     if (this.contextId() === id) return;
 
     this.cartOpen.set(false);
+    this.sessionExpiredMessage.set(null);
     this.contextId.set(id);
     void this.loadInviteByToken(id);
 
@@ -158,6 +162,7 @@ export class GuestPreorderStore {
       this.setGuestName(guestName);
       this.guestSessionId.set(res.SessionId);
       this.guestSessionToken.set(res.SessionToken);
+      this.sessionExpiredMessage.set(null);
       await this.loadMenu();
     } catch (e) {
       console.log('[join error]', e);
@@ -259,6 +264,7 @@ export class GuestPreorderStore {
     this.guestSessionId.set(null);
     this.guestSessionToken.set(null);
     this.joinError.set(null);
+    this.sessionExpiredMessage.set(null);
     this.menuError.set(null);
   }
 
@@ -313,7 +319,7 @@ export class GuestPreorderStore {
     const sessionId = this.guestSessionId();
     const token = this.guestSessionToken();
     if (!sessionId || !token) {
-      this.cartError.set('Your guest session has expired. Please rejoin the reservation.');
+      this.setInvalidGuestSessionMessage();
       return;
     }
     if (this.cartItems().length === 0 || this.cartBusy()) return;
@@ -322,9 +328,14 @@ export class GuestPreorderStore {
     this.cartError.set(null);
     try {
       await firstValueFrom(this.guestSessionsService.submit(sessionId, token));
+      this.sessionExpiredMessage.set(null);
       this.submitSuccess();
-    } catch {
-      this.cartError.set('Could not submit your pre-order. Please try again.');
+    } catch (error) {
+      if (this.isInvalidGuestSession(error)) {
+        this.setInvalidGuestSessionMessage();
+      } else {
+        this.cartError.set('Could not submit your pre-order. Please try again.');
+      }
     } finally {
       this.cartBusy.set(false);
     }
@@ -368,6 +379,7 @@ export class GuestPreorderStore {
       );
       this.guestSessionId.set(session.SessionId);
       this.guestSessionToken.set(session.SessionToken);
+      this.sessionExpiredMessage.set(null);
       await this.loadMenu();
     } catch (error) {
       this.joinError.set(
@@ -391,7 +403,7 @@ export class GuestPreorderStore {
     const sessionId = this.guestSessionId();
     const token = this.guestSessionToken();
     if (!sessionId || !token) {
-      this.cartError.set('Your guest session has expired. Please rejoin the reservation.');
+      this.setInvalidGuestSessionMessage();
       return false;
     }
     if (this.cartBusy()) return false;
@@ -404,10 +416,15 @@ export class GuestPreorderStore {
           ? this.guestSessionsService.addDish(sessionId, token, dishId, quantity)
           : this.guestSessionsService.removeDish(sessionId, token, dishId, quantity);
       await firstValueFrom(request);
+      this.sessionExpiredMessage.set(null);
       updateLocalCart();
       return true;
-    } catch {
-      this.cartError.set('Could not update your cart. Please try again.');
+    } catch (error) {
+      if (this.isInvalidGuestSession(error)) {
+        this.setInvalidGuestSessionMessage();
+      } else {
+        this.cartError.set('Could not update your cart. Please try again.');
+      }
       return false;
     } finally {
       this.cartBusy.set(false);
@@ -424,6 +441,15 @@ export class GuestPreorderStore {
       'errorCode' in body &&
       body.errorCode === 'GuestLimitExceeded'
     );
+  }
+
+  private isInvalidGuestSession(error: unknown): boolean {
+    return error instanceof HttpErrorResponse && error.status === 401;
+  }
+
+  private setInvalidGuestSessionMessage(): void {
+    this.sessionExpiredMessage.set(INVALID_GUEST_SESSION_MESSAGE);
+    this.cartError.set(null);
   }
 
   private clearStorage(ctx: string) {

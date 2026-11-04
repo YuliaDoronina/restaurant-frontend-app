@@ -81,6 +81,31 @@ describe('GuestPreOrderPageComponent', () => {
     expect(fixture.nativeElement.querySelector('app-guest-cart-drawer .drawer')).not.toBeNull();
   });
 
+  it('keeps invitation retry inside the guest name modal', () => {
+    const reloadInvite = spyOn(store, 'loadInviteByToken').and.returnValue(Promise.resolve());
+    store.inviteError.set('retryable');
+    store.inviteLoading.set(false);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('app-guest-name-modal .details-error')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('.invite-retry')).toBeNull();
+
+    (fixture.nativeElement.querySelector('.details-error button') as HTMLButtonElement).click();
+
+    expect(reloadInvite).toHaveBeenCalledOnceWith('invite-token');
+  });
+
+  it('shows the invalid-session guidance even when the cart drawer is closed', () => {
+    store.sessionExpiredMessage.set(
+      'Your guest session is no longer active. Please reopen the invitation link to rejoin the group pre-order.'
+    );
+    fixture.detectChanges();
+
+    const alert = fixture.nativeElement.querySelector('[role="alert"]') as HTMLElement;
+    expect(alert.textContent).toContain('reopen the invitation link');
+    expect(fixture.nativeElement.querySelector('app-guest-cart-drawer .drawer')).toBeNull();
+  });
+
   it('shows the submitted confirmation instead of the editable cart drawer', () => {
     store.submitSuccess();
     store.cartOpen.set(true);

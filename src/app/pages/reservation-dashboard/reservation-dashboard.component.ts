@@ -9,8 +9,8 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Router, RouterLink, RouterOutlet } from '@angular/router';
-import { EMPTY, catchError, finalize, forkJoin, map, of, switchMap, timer } from 'rxjs';
+import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
+import { EMPTY, catchError, filter, finalize, forkJoin, map, of, switchMap, tap, timer } from 'rxjs';
 
 import { AuthenticationService } from '@app/auth/services/authentication.service';
 import { CardReservationComponent } from '@app/components/reservations/card-reservation/card-reservation.component';
@@ -18,6 +18,7 @@ import { FeedbackWindowComponent } from '@app/components/reservations/feedback-w
 import { ReservationConfirmedComponent } from '@app/components/reservations/reservation-confirmed/reservation-confirmed.component';
 import { MakeReservationComponent } from '@app/components/tables/make-reservation/make-reservation.component';
 import { FeedbackUpdatedEvent } from '@app/models/feedbacks/feedback.model';
+import { Notification } from '@app/models/notifications/notification.model';
 import { GroupOrdersService } from '@app/services/group-orders/group-orders.service';
 import { NotificationsService } from '@app/services/notifications/notifications.service';
 import {
@@ -40,6 +41,8 @@ interface ReservationStatusView {
   class: string;
   label: string;
 }
+
+const NOTIFICATION_POLL_INTERVAL_MS = 15_000;
 
 @Component({
   selector: 'app-reservation-dashboard',
@@ -69,6 +72,8 @@ export class ReservationDashboardComponent implements OnInit {
   private readonly notificationsService = inject(NotificationsService);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
+  private returnedFromGroupOrder = false;
+  private seenNotificationIds = new Set<string>();
 
   readonly Roles = Roles;
 
@@ -134,14 +139,16 @@ export class ReservationDashboardComponent implements OnInit {
   });
 
   ngOnInit(): void {
-    this.groupOrdersService.participantCountUpdates$
+    this.groupOrdersService.reservationUpdates$
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(({ reservationId, count }) => {
+      .subscribe((update) => {
         this.reservations.update((reservations) =>
           reservations.map((reservation) =>
-            reservation.id === reservationId
-              ? { ...reservation, currentParticipants: count }
-              : reservation
+            reservation.id !== update.reservationId
+              ? reservation
+              : update.type === 'participant-count'
+                ? { ...reservation, currentParticipants: update.count }
+                : { ...reservation, hasSubmittedPreOrder: true }
           )
         );
       });
@@ -170,10 +177,30 @@ export class ReservationDashboardComponent implements OnInit {
     this.role.set(user.role);
     this.customerId.set(user.id);
 
-    timer(0, 60_000)
+    this.router.events
+      .pipe(
+        filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe(({ urlAfterRedirects }) => {
+        const path = urlAfterRedirects.split(/[?#]/, 1)[0].replace(/\/$/, '');
+
+        if (/^\/reservations\/[^/]+\/group-order$/.test(path)) {
+          this.returnedFromGroupOrder = true;
+          return;
+        }
+
+        if (path === '/reservations' && this.returnedFromGroupOrder) {
+          this.returnedFromGroupOrder = false;
+          this.loadReservations();
+        }
+      });
+
+    timer(0, NOTIFICATION_POLL_INTERVAL_MS)
       .pipe(
         switchMap(() =>
           this.notificationsService.loadNotifications().pipe(
+            tap((notifications) => this.refreshParticipantsForNewNotifications(notifications)),
             catchError((error) => {
               console.error('Failed to load reservation update notifications:', error);
               return EMPTY;
@@ -191,6 +218,47 @@ export class ReservationDashboardComponent implements OnInit {
     return this.notificationsService
       .unreadNotifications()
       .some((notification) => notification.reservationId === reservationId);
+  }
+
+  private refreshParticipantsForNewNotifications(notifications: Notification[]): void {
+    if (!this.reservationsLoaded()) {
+      return;
+    }
+
+    const openGroupReservations = new Set(
+      this.reservations()
+        .filter((reservation) => reservation.guestInviteLinkAvailable)
+        .map((reservation) => reservation.id)
+    );
+    const reservationIds = new Set(
+      notifications
+        .filter(
+          (notification) =>
+            !this.seenNotificationIds.has(notification.id) &&
+            openGroupReservations.has(notification.reservationId)
+        )
+        .map((notification) => notification.reservationId)
+    );
+    this.seenNotificationIds = new Set(notifications.map((notification) => notification.id));
+
+    for (const reservationId of reservationIds) {
+      this.groupOrdersService
+        .getStatusByReservationId$(reservationId, { silent: true })
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({
+          next: (status) =>
+            this.groupOrdersService.publishParticipantCount(
+              reservationId,
+              status.currentParticipants
+            ),
+          error: (error) => {
+            console.error(
+              `Failed to refresh participant count for reservation ${reservationId}:`,
+              error
+            );
+          },
+        });
+    }
   }
 
   cancelReservation(id: string): void {
@@ -423,16 +491,9 @@ export class ReservationDashboardComponent implements OnInit {
   }
 
   private loadReservations(): void {
-    this.reservationsLoaded.set(false);
-
     forkJoin({
       reservations: this.reservationService.getReservationsForUser$(),
-      orders: this.ordersService.getPreOrders().pipe(
-        catchError((error) => {
-          console.error('Failed to load pre-orders:', error);
-          return of([]);
-        })
-      ),
+      orders: this.ordersService.getPreOrders(),
     })
       .pipe(
         switchMap(({ reservations, orders }) => {
@@ -484,7 +545,6 @@ export class ReservationDashboardComponent implements OnInit {
         },
         error: (error) => {
           console.error('Failed to load reservations:', error);
-          this.reservations.set([]);
         },
       });
   }

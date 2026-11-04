@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
 import { FormsModule } from '@angular/forms';
 import { CustomButtonComponent } from '@app/shared/custom-components/custom-button/custom-button.component';
 import { ModalComponent } from '@app/shared/custom-components/modal/modal.component';
-import { GuestInviteVm } from '../../state/guest-preorder.store';
+import { GuestInviteVm } from '@app/pages/guest-pre-order-page/state/guest-preorder.store';
 
 @Component({
     standalone: true,
@@ -14,11 +14,15 @@ import { GuestInviteVm } from '../../state/guest-preorder.store';
 })
 export class GuestNameModalComponent {
     readonly invite = input<GuestInviteVm | null>(null);
+    readonly inviteLoading = input(false);
+    readonly inviteError = input<'expired' | 'retryable' | null>(null);
     readonly joinError = input<string | null>(null);
 
     readonly confirmed = output<string>();
     readonly closed = output<void>(); // x / esc / backdrop (we'll ignore this on the page)
+    readonly retryRequested = output<void>();
 
+    readonly detailSkeletonRows = [0, 1, 2, 3, 4];
     readonly name = signal('');
     readonly touched = signal(false);
 

@@ -72,4 +72,40 @@ describe('tokenInterceptor', () => {
     expect(request.request.headers.get('Authorization')).toBe('Bearer test-id-token');
     request.flush({});
   });
+
+  it('leaves invalid guest cart mutation messaging to the guest page', () => {
+    const url = 'https://test.api/guest/sessions/session-1/dishes';
+    http.post(url, {}).subscribe({ error: () => undefined });
+
+    httpMock
+      .expectOne(url)
+      .flush({ error: 'Invalid guest session token' }, { status: 401, statusText: 'Unauthorized' });
+
+    expect(toastService.error).not.toHaveBeenCalled();
+  });
+
+  it('leaves invalid guest submit messaging to the guest page', () => {
+    const url = 'https://test.api/guest/sessions/session-1/submit';
+    http.post(url, {}).subscribe({ error: () => undefined });
+
+    httpMock
+      .expectOne(url)
+      .flush({ error: 'Invalid guest session token' }, { status: 401, statusText: 'Unauthorized' });
+
+    expect(toastService.error).not.toHaveBeenCalled();
+  });
+
+  it('keeps the session-expired toast for other guest requests', () => {
+    const url = 'https://test.api/guest/sessions/session-1/menu';
+    http.get(url).subscribe({ error: () => undefined });
+
+    httpMock
+      .expectOne(url)
+      .flush({ error: 'Invalid guest session token' }, { status: 401, statusText: 'Unauthorized' });
+
+    expect(toastService.error).toHaveBeenCalledWith(
+      'Session expired. Please re-open the invite link.',
+      'Unauthorized'
+    );
+  });
 });

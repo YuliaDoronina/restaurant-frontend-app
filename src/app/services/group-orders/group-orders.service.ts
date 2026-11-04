@@ -1,6 +1,6 @@
 import { HttpClient, HttpContext } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import { forkJoin, map, Observable, Subject } from 'rxjs';
+import { forkJoin, map, Observable, Subject, switchMap } from 'rxjs';
 import { SKIP_ERROR_TOAST } from '../../auth/skip-error-toast.context';
 import { GroupSessionsResponse } from '../../models/group-orders/group-sessions-response.model';
 import { GroupStatusResponse } from '../../models/group-orders/group-status.model';
@@ -14,17 +14,22 @@ export interface GroupRequestOptions {
   silent?: boolean;
 }
 
+export type ReservationGroupUpdate =
+  | { type: 'participant-count'; reservationId: string; count: number }
+  | { type: 'pre-order-submitted'; reservationId: string };
+
 @Injectable({ providedIn: 'root' })
 export class GroupOrdersService {
   private readonly baseUrl = inject(API_BASE_URL);
   private readonly http = inject(HttpClient);
-  readonly participantCountUpdates$ = new Subject<{
-    reservationId: string;
-    count: number;
-  }>();
+  readonly reservationUpdates$ = new Subject<ReservationGroupUpdate>();
 
   publishParticipantCount(reservationId: string, count: number): void {
-    this.participantCountUpdates$.next({ reservationId, count });
+    this.reservationUpdates$.next({ type: 'participant-count', reservationId, count });
+  }
+
+  publishPreOrderSubmitted(reservationId: string): void {
+    this.reservationUpdates$.next({ type: 'pre-order-submitted', reservationId });
   }
 
   getGroupInvite$(reservationId: string): Observable<GuestInvite> {
@@ -70,6 +75,18 @@ export class GroupOrdersService {
       `${this.baseUrl}/guest/groups/${encodeURIComponent(groupReservationId)}/status`,
       { context: new HttpContext().set(SKIP_ERROR_TOAST, options.silent ?? false) },
     );
+  }
+
+  getStatusByReservationId$(
+    reservationId: string,
+    options: GroupRequestOptions = {},
+  ): Observable<GroupStatusResponse> {
+    return this.http
+      .get<OwnerSessionResponse>(
+        `${this.baseUrl}/reservations/${encodeURIComponent(reservationId)}/guest-session-id`,
+        { context: new HttpContext().set(SKIP_ERROR_TOAST, options.silent ?? false) },
+      )
+      .pipe(switchMap(({ groupReservationId }) => this.getStatus$(groupReservationId, options)));
   }
 
   removeSession$(groupReservationId: string, guestSessionId: string): Observable<GroupSessionsResponse> {

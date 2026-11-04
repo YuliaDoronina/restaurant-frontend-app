@@ -1,5 +1,5 @@
-// Рівень 3 · синхронізація з бекендом: кожні 15 с, поки група Open.
-// fakeAsync + tick(15_000) «прокручує» час без очікування. Запуск: npm run test:hw
+// Рівень 3 · синхронізація з бекендом: кожні 7,5 с, поки група Open.
+// fakeAsync + tick(7_500) «прокручує» час без очікування. Запуск: npm run test:hw
 import { TestBed, discardPeriodicTasks, fakeAsync, tick } from '@angular/core/testing';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, convertToParamMap } from '@angular/router';
@@ -12,7 +12,7 @@ import { GroupSessionsResponse } from '@app/models/group-orders/group-sessions-r
 import { GuestInvite } from '@app/models/reservations/guest-invite.model';
 import { GroupOrderPageComponent } from './group-order-page.component';
 
-const SYNC_MS = 15_000;
+const SYNC_MS = 7_500;
 const caesar = { id: 'dish1', name: 'Caesar Salad', price: 180 };
 const tomYum = { id: 'dish2', name: 'Tom Yum', price: 220 };
 const SESSIONS: GroupSessionsResponse = {
@@ -88,6 +88,8 @@ describe('Рівень 3 · синхронізація', () => {
       'getOwnerSessionId$',
       'getStatus$',
       'submit$',
+      'publishParticipantCount',
+      'publishPreOrderSubmitted',
     ]);
     service.getGroupInvite$.and.returnValue(of(INVITE));
     service.getSessions$.and.returnValue(of(structuredClone(SESSIONS)));

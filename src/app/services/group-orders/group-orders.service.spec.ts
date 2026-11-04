@@ -3,6 +3,7 @@
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { SKIP_ERROR_TOAST } from '@app/auth/skip-error-toast.context';
 import { API_BASE_URL } from '@app/shared/config/api-base-url.token';
 import { GroupOrdersService } from './group-orders.service';
 
@@ -64,6 +65,24 @@ describe('Рівень 2 · GroupOrdersService', () => {
     const req = http.expectOne(`${BASE_URL}/guest/groups/grp-1/status`);
     expect(req.request.method).toBe('GET');
     req.flush({ currentParticipants: 3, maxCapacity: 5, status: 'Open' });
+  });
+
+  it('getStatusByReservationId$: resolves the group and loads its current status', () => {
+    let participants = 0;
+    service
+      .getStatusByReservationId$('res-1', { silent: true })
+      .subscribe((status) => (participants = status.currentParticipants));
+
+    const ownerContext = http.expectOne(`${BASE_URL}/reservations/res-1/guest-session-id`);
+    expect(ownerContext.request.method).toBe('GET');
+    expect(ownerContext.request.context.get(SKIP_ERROR_TOAST)).toBeTrue();
+    ownerContext.flush({ guestSessionId: 'owner-1', groupReservationId: 'grp-1' });
+
+    const status = http.expectOne(`${BASE_URL}/guest/groups/grp-1/status`);
+    expect(status.request.method).toBe('GET');
+    expect(status.request.context.get(SKIP_ERROR_TOAST)).toBeTrue();
+    status.flush({ currentParticipants: 3, maxCapacity: 5, status: 'Open' });
+    expect(participants).toBe(3);
   });
 
   it('submit$: POST /group-reservations/{id}/submit з тілом { reservationId }', () => {

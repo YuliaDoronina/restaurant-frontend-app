@@ -7,15 +7,12 @@
     (createNew)="store.createNewPreorder()"
   />
 } @else {
-  @if (store.inviteError() === 'retryable') {
-    <section class="invite-retry" role="alert">
-      <h1>We couldn’t load the invitation</h1>
-      <p>This may be a temporary connection or server issue. Please try again.</p>
-      <button type="button" [disabled]="store.inviteLoading()" (click)="retryInviteLoad()">
-        {{ store.inviteLoading() ? 'Retrying...' : 'Try again' }}
-      </button>
-    </section>
-  } @else {
+    @if (store.sessionExpiredMessage(); as message) {
+      <section class="guest-session-alert" role="alert">
+        <p>{{ message }}</p>
+      </section>
+    }
+
     <!-- green reservation details strip -->
     <div class="reservation-strip">
       <div class="strip-text">
@@ -53,6 +50,8 @@
           <div class="menu-placeholder">Loading menu...</div>
         } @else if (store.menuError()) {
           <div class="menu-placeholder">{{ store.menuError() }}</div>
+        } @else if (!store.hasMenu() && store.sessionExpiredMessage()) {
+          <div class="menu-placeholder">Reopen the invitation link to rejoin and load the menu.</div>
         } @else if (!store.hasMenu()) {
           <div class="menu-placeholder">Menu is empty</div>
         } @else {
@@ -106,11 +105,14 @@
     </div>
 
     <!-- mandatory modal: show until name is set -->
-    @if (!store.guestName()) {
+    @if (!store.guestName() || store.inviteError() === 'retryable') {
       <app-guest-name-modal
         [invite]="store.inviteVm()"
+        [inviteLoading]="store.inviteLoading()"
+        [inviteError]="store.inviteError()"
         [joinError]="store.joinError()"
         (confirmed)="store.join($event)"
+        (retryRequested)="retryInviteLoad()"
         (closed)="noop()"
       />
     }
@@ -129,5 +131,4 @@
       (remove)="store.remove($event)"
       (submitted)="store.submitPreorder()"
     />
-  }
 }

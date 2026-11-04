@@ -100,6 +100,7 @@ describe('Бонус · Remove Guest', () => {
       'getStatus$',
       'submit$',
       'removeSession$',
+      'publishParticipantCount',
     ]);
     service.getGroupInvite$.and.returnValue(of(INVITE));
     service.getSessions$.and.returnValue(of(structuredClone(SESSIONS)));
@@ -122,6 +123,7 @@ describe('Бонус · Remove Guest', () => {
       of({ participants: SESSIONS.participants.slice(0, 2), total: 540 })
     );
     const { fixture, element } = create();
+    service.publishParticipantCount.calls.reset();
 
     removeButtons(element)[1].click(); // Olena
     fixture.detectChanges();
@@ -134,6 +136,7 @@ describe('Бонус · Remove Guest', () => {
 
     expect(service.removeSession$).toHaveBeenCalledOnceWith('grp-1', 'olena');
     expect(element.querySelectorAll('app-participant-card').length).toBe(2);
+    expect(service.publishParticipantCount).toHaveBeenCalledOnceWith('res-1', 2);
   });
 
   it('помилка DELETE: список лишається без змін', () => {
@@ -141,11 +144,13 @@ describe('Бонус · Remove Guest', () => {
       throwError(() => new HttpErrorResponse({ status: 400 }))
     );
     const { fixture, element } = create();
+    service.publishParticipantCount.calls.reset();
     removeButtons(element)[1].click();
     fixture.detectChanges();
     buttonByText(element.querySelector('[role="dialog"]')!, 'Remove Guest')?.click();
     fixture.detectChanges();
     expect(element.querySelectorAll('app-participant-card').length).toBe(3);
+    expect(service.publishParticipantCount).not.toHaveBeenCalled();
   });
 
   it('після Submit кнопок «Remove Guest» немає', () => {

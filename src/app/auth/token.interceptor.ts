@@ -24,6 +24,9 @@ export const tokenInterceptor: HttpInterceptorFn = (
     (req.method === 'GET' && /\/guest\/groups\/[^/]+\/sessions$/.test(requestPath)) ||
     (req.method === 'DELETE' && /\/guest\/groups\/[^/]+\/sessions\/[^/]+$/.test(requestPath)) ||
     (req.method === 'PATCH' && /\/guest\/groups\/[^/]+\/sessions\/[^/]+\/dishes$/.test(requestPath));
+  const isGuestCartMutationRequest =
+    (req.method === 'POST' && /\/guest\/sessions\/[^/]+\/(?:dishes|submit)$/.test(requestPath)) ||
+    (req.method === 'DELETE' && /\/guest\/sessions\/[^/]+\/dishes$/.test(requestPath));
 
   if (req.url.includes('/guest/') && !isOwnerGroupSessionsRequest) {
     return next(req).pipe(
@@ -48,7 +51,9 @@ export const tokenInterceptor: HttpInterceptorFn = (
             toastr.error(errorMessage || 'Bad request.', 'Error');
             break;
           case 401:
-            toastr.error('Session expired. Please re-open the invite link.', 'Unauthorized');
+            if (!isGuestCartMutationRequest) {
+              toastr.error('Session expired. Please re-open the invite link.', 'Unauthorized');
+            }
             break;
           case 403:
             toastr.error(errorMessage || 'You are not allowed!', 'Forbidden');

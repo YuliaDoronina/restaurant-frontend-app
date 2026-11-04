@@ -101,6 +101,8 @@ describe('Рівень 2 · сторінка Owner Review', () => {
       'getStatus$',
       'submit$',
       'updateGroupSessionDish$',
+      'publishParticipantCount',
+      'publishPreOrderSubmitted',
     ]);
     service.getGroupInvite$.and.returnValue(of(INVITE));
     service.getSessions$.and.returnValue(of(structuredClone(SESSIONS)));
@@ -293,6 +295,7 @@ describe('Рівень 2 · сторінка Owner Review', () => {
 
       expect(element.textContent).toContain('Sent to Restaurant');
       expect(buttonByText(element, 'Submit Pre-Order')).toBeUndefined();
+      expect(service.publishPreOrderSubmitted).toHaveBeenCalledOnceWith('res-1');
     });
 
     it('помилка submit: екран не ламається, кнопку можна натиснути знову', () => {
@@ -304,6 +307,7 @@ describe('Рівень 2 · сторінка Owner Review', () => {
       fixture.detectChanges();
 
       expect(buttonByText(element, 'Submit Pre-Order')?.disabled).toBeFalse();
+      expect(service.publishPreOrderSubmitted).not.toHaveBeenCalled();
     });
   });
 });

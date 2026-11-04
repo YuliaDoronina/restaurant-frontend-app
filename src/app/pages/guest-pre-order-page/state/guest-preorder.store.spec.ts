@@ -64,6 +64,16 @@ describe('GuestPreorderStore', () => {
         expect(store.guestSessionToken()).toBe('secret-token');
     });
 
+    it('clears an old session warning when opening a different invitation', () => {
+        guestInviteService.getInvite$.and.returnValue(of(INVITE));
+
+        const store = TestBed.inject(GuestPreorderStore);
+        store.sessionExpiredMessage.set('Old invitation session is inactive.');
+        store.initContext('another-invite-token');
+
+        expect(store.sessionExpiredMessage()).toBeNull();
+    });
+
     it('shows actionable guidance when a new guest session is rejected at capacity', async () => {
         spyOn(console, 'log');
         guestSessionsService.createSession.and.returnValue(
@@ -85,5 +95,79 @@ describe('GuestPreorderStore', () => {
         );
         expect(store.guestName()).toBe('');
         expect(store.guestSessionId()).toBeNull();
+    });
+
+    it('shows rejoin guidance and preserves the cart when a removed guest adds a dish', async () => {
+        const existingItem = {
+            dishId: 'dish-1',
+            title: 'Soup',
+            price: 8,
+            qty: 1,
+        };
+        guestSessionsService.addDish.and.returnValue(
+            throwError(() => new HttpErrorResponse({ status: 401 }))
+        );
+
+        const store = TestBed.inject(GuestPreorderStore);
+        store.guestSessionId.set('session-1');
+        store.guestSessionToken.set('session-token');
+        store.cartItems.set([existingItem]);
+
+        const added = await store.addDish({
+            dishId: 'dish-2',
+            title: 'Salad',
+            price: 12,
+        });
+
+        expect(added).toBeFalse();
+        expect(store.sessionExpiredMessage()).toContain('reopen the invitation link');
+        expect(store.cartItems()).toEqual([existingItem]);
+        expect(store.guestSessionId()).toBe('session-1');
+        expect(store.guestSessionToken()).toBe('session-token');
+        expect(store.cartError()).toBeNull();
+    });
+
+    it('keeps generic cart errors for unrelated API failures', async () => {
+        guestSessionsService.addDish.and.returnValue(
+            throwError(() => new HttpErrorResponse({ status: 500 }))
+        );
+
+        const store = TestBed.inject(GuestPreorderStore);
+        store.guestSessionId.set('session-1');
+        store.guestSessionToken.set('session-token');
+
+        await store.addDish({
+            dishId: 'dish-1',
+            title: 'Soup',
+            price: 8,
+        });
+
+        expect(store.sessionExpiredMessage()).toBeNull();
+        expect(store.cartError()).toBe('Could not update your cart. Please try again.');
+    });
+
+    it('preserves the cart and shows rejoin guidance when submit is unauthorized', async () => {
+        const existingItem = {
+            dishId: 'dish-1',
+            title: 'Soup',
+            price: 8,
+            qty: 1,
+        };
+        guestSessionsService.submit.and.returnValue(
+            throwError(() => new HttpErrorResponse({ status: 401 }))
+        );
+
+        const store = TestBed.inject(GuestPreorderStore);
+        store.guestSessionId.set('session-1');
+        store.guestSessionToken.set('session-token');
+        store.cartItems.set([existingItem]);
+
+        await store.submitPreorder();
+
+        expect(store.sessionExpiredMessage()).toContain('reopen the invitation link');
+        expect(store.cartItems()).toEqual([existingItem]);
+        expect(store.status()).toBe('active');
+        expect(store.guestSessionId()).toBe('session-1');
+        expect(store.cartError()).toBeNull();
     });
 });

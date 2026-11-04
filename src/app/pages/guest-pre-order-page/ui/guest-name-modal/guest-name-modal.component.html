@@ -1,38 +1,85 @@
-<app-modal [title]='"You’re Invited!"' [width]="'520px'" [closeOnBackdrop]="false" (closed)="closed.emit()">
-    <p class="subtitle">
-        {{ invite()?.inviterName || 'Someone' }} invited you to pre-order for an upcoming reservation.
-    </p>
+<app-modal
+  [title]='"You’re Invited!"'
+  [width]="'520px'"
+  [closeOnBackdrop]="false"
+  (closed)="closed.emit()"
+>
+  <p class="subtitle">
+    {{ invite()?.inviterName || 'Someone' }} invited you to pre-order for an upcoming reservation.
+  </p>
 
-    @if (!invite()) {
-    <div class="details-loading">Loading reservation details...</div>
+  <div class="details-area">
+    @if (inviteError() === 'retryable') {
+      <div class="details-error" role="alert">
+        <p>We couldn’t load the reservation details. Please try again.</p>
+        <button type="button" [disabled]="inviteLoading()" (click)="retryRequested.emit()">
+          {{ inviteLoading() ? 'Retrying...' : 'Try again' }}
+        </button>
+      </div>
+    } @else if (inviteLoading() || !invite()) {
+      <div class="details details-loading" role="status" aria-label="Loading reservation details">
+        @for (row of detailSkeletonRows; track row) {
+          <div class="row skeleton-row" aria-hidden="true">
+            <span class="skeleton label-skeleton"></span>
+            <span class="skeleton value-skeleton"></span>
+          </div>
+        }
+      </div>
     } @else {
-    <div class="details">
-        <div class="row"><span class="label">Restaurant</span><span class="value">{{ invite()!.restaurantName }}</span>
+      <div class="details">
+        <div class="row">
+          <span class="label">Restaurant</span>
+          <span class="value" [title]="invite()!.restaurantName">{{ invite()!.restaurantName }}</span>
         </div>
-        <div class="row"><span class="label">Location</span><span class="value">{{ invite()!.locationAddress }}</span>
+        <div class="row">
+          <span class="label">Location</span>
+          <span class="value" [title]="invite()!.locationAddress">{{ invite()!.locationAddress }}</span>
         </div>
-        <div class="row"><span class="label">Date</span><span class="value">{{ invite()!.dateText }}</span></div>
-        <div class="row"><span class="label">Time</span><span class="value">{{ invite()!.timeText }}</span></div>
-        <div class="row"><span class="label">Guests</span><span class="value">{{ invite()!.guestsText }}</span></div>
-    </div>
+        <div class="row">
+          <span class="label">Date</span>
+          <span class="value" [title]="invite()!.dateText">{{ invite()!.dateText }}</span>
+        </div>
+        <div class="row">
+          <span class="label">Time</span>
+          <span class="value" [title]="invite()!.timeText">{{ invite()!.timeText }}</span>
+        </div>
+        <div class="row">
+          <span class="label">Guests</span>
+          <span class="value" [title]="invite()!.guestsText">{{ invite()!.guestsText }}</span>
+        </div>
+      </div>
     }
+  </div>
 
-    <div class="field">
-        <label class="field-label" for="guestName">Enter Your Name</label>
-        <input id="guestName" type="text" placeholder="e.g. Jonson D." [(ngModel)]="name" (blur)="touched.set(true)"
-            (keydown.enter)="submit()" autocomplete="name" />
-        @if (touched() && !valid()) {
-        <div class="error">Name is required</div>
-        }
-        @if (joinError()) {
-        <div class="error" role="alert">{{ joinError() }}</div>
-        }
-    </div>
+  <div class="field">
+    <label class="field-label" for="guestName">Enter Your Name</label>
+    <input
+      id="guestName"
+      type="text"
+      placeholder="e.g. Jonson D."
+      [(ngModel)]="name"
+      (blur)="touched.set(true)"
+      (keydown.enter)="submit()"
+      autocomplete="name"
+    />
+    @if (touched() && !valid()) {
+      <div class="error">Name is required</div>
+    }
+    @if (joinError()) {
+      <div class="error" role="alert">{{ joinError() }}</div>
+    }
+  </div>
 
-    <div modal-actions class="actions">
-        <app-custom-button type="button" variant="primary" size="extra-large" fullWidth
-            [disabled]="!valid() || !invite()" (click)="submit()">
-            Browse Menu
-        </app-custom-button>
-    </div>
+  <div modal-actions class="actions">
+    <app-custom-button
+      type="button"
+      variant="primary"
+      size="extra-large"
+      fullWidth
+      [disabled]="!valid() || !invite() || inviteLoading() || inviteError() === 'retryable'"
+      (click)="submit()"
+    >
+      Browse Menu
+    </app-custom-button>
+  </div>
 </app-modal>

@@ -186,6 +186,19 @@
   text-align: center;
 }
 
+.guest-session-alert {
+  margin: 1rem 2.5rem 0;
+  padding: 0.875rem 1rem;
+  border: 1px solid color.$red-400;
+  border-radius: 0.5rem;
+  background: color.$red-30;
+  color: color.$neutral-900;
+
+  p {
+    margin: 0;
+  }
+}
+
 @media (max-width: 768px) {
   .page-navigation {
     padding: 0.75rem 1rem;
@@ -200,6 +213,10 @@
   }
 
   .content-sections {
+    margin: 1rem;
+  }
+
+  .guest-session-alert {
     margin: 1rem;
   }
 
@@ -222,40 +239,5 @@
   .dish-cards {
     grid-template-columns: 1fr;
     justify-items: center;
-  }
-}
-
-.invite-retry {
-  display: grid;
-  min-height: 55vh;
-  align-content: center;
-  justify-items: center;
-  padding: 2rem;
-  text-align: center;
-
-  h1 {
-    margin: 0;
-    color: color.$neutral-900;
-    font-size: 1.5rem;
-  }
-
-  p {
-    max-width: 32rem;
-    color: color.$neutral-700;
-  }
-
-  button {
-    padding: 0.7rem 1.5rem;
-    border: 0;
-    border-radius: 0.5rem;
-    background: color.$green-600;
-    color: color.$neutral-0;
-    font: inherit;
-    cursor: pointer;
-
-    &:disabled {
-      cursor: wait;
-      opacity: 0.65;
-    }
   }
 }

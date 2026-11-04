@@ -38,6 +38,8 @@ import { ToastService } from '../../services/toast/toast.service';
 import { ModalComponent } from '../../shared/custom-components/modal/modal.component';
 import { consolidatePreOrder } from '../../shared/helpers/consolidate-pre-order';
 
+const SYNC_INTERVAL_MS = 7_500;
+
 @Component({
   selector: 'app-group-order-page',
   imports: [ParticipantCardComponent, CurrencyPipe, DatePipe, ModalComponent, RouterLink],
@@ -177,10 +179,7 @@ export class GroupOrderPageComponent {
           this.status.set(status.status);
           this.currentParticipants.set(status.currentParticipants);
           this.maxCapacity.set(status.maxCapacity);
-          this.groupOrders.publishParticipantCount?.(
-            this.reservationId(),
-            status.currentParticipants
-          );
+          this.groupOrders.publishParticipantCount(this.reservationId(), status.currentParticipants);
           this.lastUpdatedAt.set(new Date());
           this.refreshFailed.set(false);
           this.loading.set(false);
@@ -254,6 +253,7 @@ export class GroupOrderPageComponent {
         next: (sessions) => {
           this.participants.set(sessions.participants);
           this.currentParticipants.set(sessions.participants.length);
+          this.groupOrders.publishParticipantCount(this.reservationId(), sessions.participants.length);
           this.guestToRemove.set(null);
         },
         error: () => {
@@ -371,6 +371,7 @@ export class GroupOrderPageComponent {
       .subscribe({
         next: () => {
           this.status.set('Submitted');
+          this.groupOrders.publishPreOrderSubmitted(this.reservationId());
           this.lastUpdatedAt.set(new Date());
           this.refreshFailed.set(false);
           this.confirmSubmitOpen.set(false);
@@ -389,7 +390,7 @@ export class GroupOrderPageComponent {
     if (this.status() !== 'Open' || (this.pollingSubscription && !this.pollingSubscription.closed))
       return;
 
-    this.pollingSubscription = timer(15_000, 15_000)
+    this.pollingSubscription = timer(SYNC_INTERVAL_MS, SYNC_INTERVAL_MS)
       .pipe(
         exhaustMap(() => this.syncSnapshot(true)),
         takeWhile(() => this.status() === 'Open', true),
@@ -415,10 +416,7 @@ export class GroupOrderPageComponent {
       tap(({ sessions, status }) => {
         this.participants.set(sessions.participants);
         this.currentParticipants.set(status.currentParticipants);
-        this.groupOrders.publishParticipantCount?.(
-          this.reservationId(),
-          status.currentParticipants
-        );
+        this.groupOrders.publishParticipantCount(this.reservationId(), status.currentParticipants);
         this.maxCapacity.set(status.maxCapacity);
         this.status.set(status.status);
         this.lastUpdatedAt.set(new Date());
