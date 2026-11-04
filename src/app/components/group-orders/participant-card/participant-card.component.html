@@ -1,0 +1,95 @@
+<article class="participant-card">
+  <header class="card-header">
+    <div class="participant-title">
+      <h2 class="card-title">{{ title() }}</h2>
+      @if (participant().type === 'Guest') {
+        @if (participant().isSubmitted) {
+          <span class="status status-submitted">Submitted</span>
+        } @else {
+          <span class="status status-pending">Still choosing</span>
+        }
+      }
+    </div>
+    @if (canRemove() && participant().type === 'Guest') {
+      <button
+        type="button"
+        class="text-action remove-guest-action"
+        [attr.aria-label]="'Remove ' + participant().name"
+        (click)="removeClick.emit(participant())"
+      >
+        Remove Guest
+      </button>
+    }
+  </header>
+
+  @if (participant().items.length) {
+    <ul class="item-list">
+      @for (item of participant().items; track item.dish.id) {
+        <li class="item-row" [class.editable]="canEdit()">
+          @if (canEdit()) {
+            <button
+              type="button"
+              class="dish-remove"
+              [disabled]="!canEditParticipantDishes() || dishUpdateInProgress()"
+              [attr.aria-label]="'Remove ' + item.dish.name"
+              (click)="removeDish.emit(item.dish.id)"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M5 7l1 14h12l1-14M9 7V4h6v3" /></svg>
+            </button>
+          }
+          @if (item.dish.imageUrl) {
+            <img
+              class="dish-image"
+              [src]="item.dish.imageUrl"
+              alt=""
+              width="40"
+              height="40"
+              loading="lazy"
+            />
+          } @else {
+            <span class="dish-image dish-initial" aria-hidden="true">{{ item.dish.name.charAt(0) }}</span>
+          }
+          <div class="dish-info">
+            <p class="dish-name">{{ item.dish.name }}</p>
+            @if (item.dish.weight) {
+              <p class="dish-weight">{{ item.dish.weight }}</p>
+            }
+          </div>
+          @if (canEdit()) {
+            <div class="quantity-control" [attr.aria-label]="item.dish.name + ' quantity'">
+              <button
+                type="button"
+                class="quantity-button"
+                [disabled]="item.quantity <= 1 || dishUpdateInProgress()"
+                [attr.aria-label]="'Decrease ' + item.dish.name + ' quantity'"
+                (click)="quantityChange.emit({ dishId: item.dish.id, change: -1 })"
+              >
+                −
+              </button>
+              <span class="quantity-value">{{ item.quantity }}</span>
+              <button
+                type="button"
+                class="quantity-button quantity-increase"
+                [disabled]="!canEditParticipantDishes() || dishUpdateInProgress()"
+                [attr.aria-label]="'Increase ' + item.dish.name + ' quantity'"
+                (click)="quantityChange.emit({ dishId: item.dish.id, change: 1 })"
+              >
+                +
+              </button>
+            </div>
+          } @else {
+            <p class="quantity">× {{ item.quantity }}</p>
+          }
+          <p class="item-price">{{ item.dish.price * item.quantity | currency }}</p>
+        </li>
+      }
+    </ul>
+  } @else {
+    <p class="empty-items">No dishes yet</p>
+  }
+
+  <div class="subtotal">
+    <span>Subtotal</span>
+    <span>{{ participant().total | currency }}</span>
+  </div>
+</article>

@@ -1,4 +1,4 @@
-export type GroupReservationStatus = 'Open' | 'Submitted' | 'Closed';
+export type GroupReservationStatus = 'Open' | 'Submitting' | 'Submitted' | 'Closed';
 
 /** GET /guest/groups/{groupReservationId}/status */
 export interface GroupStatusResponse {

@@ -40,7 +40,7 @@ export class MenuPageComponent implements OnInit {
   menuCategories = Object.values(DishType);
   menuCategoryLabels = DishTypeLabels;
 
-  selectedCategory: DishType | null = null; // initially show all
+  selectedCategory: DishType | null = DishType.Appetizer;
   selectedSort: DishSort = DishSort.PopularityDescending;
 
   private readonly dishesService = inject(DishesService);
@@ -48,13 +48,22 @@ export class MenuPageComponent implements OnInit {
   private readonly router = inject(Router);
   private  readonly orderService = inject(PreOrdersService);
 
+  private formatReservationLabel(label: string): string {
+    return label
+      .replace(/tbl-0*/g, '') // "Table tbl-003" -> "Table 3"
+      .replace(/(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+([A-Za-z]{3}\s+\d{1,2})\s+(\d{4})/g, '$1, $2') // "Tue Nov 03 2026" -> "Nov 03, 2026"
+      .replace(/(\d{2}:\d{2}):00/g, '$1'); // "18:15:00" -> "18:15"
+  }
+
   ngOnInit(): void {
     this.route.queryParams.subscribe((params) => {
       const preOrder = params['preOrder'];
       this.isPreOrderEnabled = !!preOrder;
       if (this.isPreOrderEnabled) {
         this.preOrderReservationId = params['reservationId'];
-        this.preOrderReservationLabel = params['reservationLabel'];
+        const rawLabel = params['reservationLabel'];
+        this.preOrderReservationLabel = rawLabel ? this.formatReservationLabel(rawLabel) : undefined;
+
         if (!this.preOrderReservationId) {
           console.error('Pre-order is enabled but no reservation ID provided.');
           this.toast.error('Pre-order is enabled but no reservation ID provided.', 'Error');
@@ -66,7 +75,9 @@ export class MenuPageComponent implements OnInit {
       const sort = params['sort'] as DishSort;
 
       this.selectedCategory =
-        category && Object.values(DishType).includes(category) ? category : null;
+        category && Object.values(DishType).includes(category)
+          ? category
+          : DishType.Appetizer;
       this.selectedSort =
         sort && Object.values(DishSort).includes(sort) ? sort : DishSort.PopularityDescending;
 
@@ -100,7 +111,7 @@ export class MenuPageComponent implements OnInit {
   }
 
   onCategorySelected(category: DishType): void {
-    this.selectedCategory = this.selectedCategory === category ? null : category;
+    this.selectedCategory = category;
 
     this.router.navigate([], {
       relativeTo: this.route,

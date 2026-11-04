@@ -17,6 +17,7 @@ import {
   addMinutesIso,
   findClosestDuration,
   formatTime,
+  MINIMUM_RESERVATION_LEAD_TIME_MINUTES,
   minutesBetween,
 } from '@app/shared/helpers/date-helpers';
 import { STAY_DURATION_OPTIONS } from './constants';
@@ -52,9 +53,17 @@ export class EditReservationModalComponent {
   );
 
   protected readonly timeOptions = computed<SelectOption[]>(() => {
-    const starts = this.table().timeRanges.map((range) => range.start);
+    const minimumStartTime =
+      Date.now() + MINIMUM_RESERVATION_LEAD_TIME_MINUTES * 60_000;
+    const starts = this.table().timeRanges
+      .map((range) => range.start)
+      .filter((start) => Date.parse(start) >= minimumStartTime);
     const current = this.timeRange().start;
-    const allStarts = starts.includes(current) ? starts : [current, ...starts];
+    const allStarts = starts.includes(current)
+      ? starts
+      : Date.parse(current) >= minimumStartTime
+        ? [current, ...starts]
+        : starts;
 
     return allStarts.map((start) => ({ text: formatTime(start), value: start }));
   });

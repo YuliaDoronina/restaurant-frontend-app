@@ -37,6 +37,9 @@ describe('EditReservationModalComponent', () => {
   }
 
   beforeEach(async () => {
+    jasmine.clock().install();
+    jasmine.clock().mockDate(new Date(2026, 9, 17, 9, 0));
+
     await TestBed.configureTestingModule({
       imports: [EditReservationModalComponent],
     }).compileComponents();
@@ -46,6 +49,10 @@ describe('EditReservationModalComponent', () => {
     element = fixture.nativeElement;
     saved = undefined;
     component.saveChanges.subscribe((changes) => (saved = changes));
+  });
+
+  afterEach(() => {
+    jasmine.clock().uninstall();
   });
 
   it('renders the title and the location, table and date subtitle', () => {
@@ -135,6 +142,15 @@ describe('EditReservationModalComponent', () => {
 
     expect(saved?.timeRange.start).toBe(localIso(10));
     expect(element.textContent).toContain('10:00');
+  });
+
+  it('does not offer a start time that is less than 30 minutes away', () => {
+    jasmine.clock().mockDate(new Date(2026, 9, 17, 11, 30, 1));
+    render({ start: localIso(12), end: localIso(13, 30) });
+
+    expect(component['timeOptions']().map((option) => option.value)).toEqual([
+      TABLE.timeRanges[1].start,
+    ]);
   });
 
   it('emits closed when the close button is clicked', () => {

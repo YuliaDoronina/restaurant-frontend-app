@@ -17,10 +17,18 @@ export const tokenInterceptor: HttpInterceptorFn = (
 ) => {
   const toastr = inject(ToastService);
 
-  // IMPORTANT: do not modify Guest endpoints at all.
-  // Guest flow uses a different token (guest session token) and we must not touch the body.
-  // Otherwise we break POST /guest/sessions payload.
-  if (req.url.includes('/guest/')) {
+  // Guest session routes use their own token. The Owner's group-session list is an exception:
+  // it is under /guest/ but protected by the Cognito authorizer.
+  const requestPath = req.url.split('?')[0];
+  const isOwnerGroupSessionsRequest =
+    (req.method === 'GET' && /\/guest\/groups\/[^/]+\/sessions$/.test(requestPath)) ||
+    (req.method === 'DELETE' && /\/guest\/groups\/[^/]+\/sessions\/[^/]+$/.test(requestPath)) ||
+    (req.method === 'PATCH' && /\/guest\/groups\/[^/]+\/sessions\/[^/]+\/dishes$/.test(requestPath));
+  const isGuestCartMutationRequest =
+    (req.method === 'POST' && /\/guest\/sessions\/[^/]+\/(?:dishes|submit)$/.test(requestPath)) ||
+    (req.method === 'DELETE' && /\/guest\/sessions\/[^/]+\/dishes$/.test(requestPath));
+
+  if (req.url.includes('/guest/') && !isOwnerGroupSessionsRequest) {
     return next(req).pipe(
       catchError((error: HttpErrorResponse) => {
         console.log(error);
@@ -34,13 +42,18 @@ export const tokenInterceptor: HttpInterceptorFn = (
           errorMessage = error.error.message;
         }
 
-        // For guest endpoints, you may still show toast if you want:
+        if (req.context.get(SKIP_ERROR_TOAST)) {
+          return throwError(() => error);
+        }
+
         switch (error.status) {
           case 400:
             toastr.error(errorMessage || 'Bad request.', 'Error');
             break;
           case 401:
-            toastr.error('Session expired. Please re-open the invite link.', 'Unauthorized');
+            if (!isGuestCartMutationRequest) {
+              toastr.error('Session expired. Please re-open the invite link.', 'Unauthorized');
+            }
             break;
           case 403:
             toastr.error(errorMessage || 'You are not allowed!', 'Forbidden');

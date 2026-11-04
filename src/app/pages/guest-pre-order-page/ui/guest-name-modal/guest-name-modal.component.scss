@@ -15,19 +15,30 @@
 
 .subtitle {
   margin: 0;
+  height: 48px;
+  display: -webkit-box;
+  overflow: hidden;
   color: color.$neutral-900;
   font-size: 14px;
   line-height: 24px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.details-area {
+  height: 152px;
 }
 
 .details {
   display: grid;
+  height: 152px;
   gap: 8px;
 }
 
 .row {
   display: grid;
-  grid-template-columns: 100px 1fr;
+  height: 24px;
+  grid-template-columns: 100px minmax(0, 1fr);
   gap: 16px;
   align-items: center;
   font-size: 14px;
@@ -40,13 +51,74 @@
 }
 
 .value {
+  overflow: hidden;
   color: color.$neutral-900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .details-loading {
-  color: color.$neutral-400;
-  font-size: 14px;
-  line-height: 24px;
+  align-content: start;
+}
+
+.skeleton {
+  display: block;
+  height: 12px;
+  border-radius: 6px;
+  background: color.$neutral-200;
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+.label-skeleton {
+  width: 72px;
+}
+
+.value-skeleton {
+  width: 100%;
+  max-width: 220px;
+}
+
+.details-error {
+  display: grid;
+  height: 152px;
+  align-content: center;
+  justify-items: center;
+  gap: 12px;
+  color: color.$neutral-900;
+  text-align: center;
+
+  p {
+    margin: 0;
+    font-size: 14px;
+    line-height: 24px;
+  }
+
+  button {
+    padding: 0.5rem 1rem;
+    border: 0;
+    border-radius: 0.5rem;
+    background: color.$green-600;
+    color: color.$neutral-0;
+    font: inherit;
+    cursor: pointer;
+
+    &:disabled {
+      cursor: wait;
+      opacity: 0.65;
+    }
+  }
+}
+
+@keyframes skeleton-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
 }
 
 .field {

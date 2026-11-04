@@ -9,14 +9,18 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Router, RouterLink } from '@angular/router';
+import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
 import {
+  EMPTY,
   catchError,
+  filter,
   finalize,
   forkJoin,
   map,
   of,
   switchMap,
+  tap,
+  timer,
 } from 'rxjs';
 
 import { AuthenticationService } from '@app/auth/services/authentication.service';
@@ -25,6 +29,10 @@ import { FeedbackWindowComponent } from '@app/components/reservations/feedback-w
 import { ReservationConfirmedComponent } from '@app/components/reservations/reservation-confirmed/reservation-confirmed.component';
 import { MakeReservationComponent } from '@app/components/tables/make-reservation/make-reservation.component';
 import { FeedbackUpdatedEvent } from '@app/models/feedbacks/feedback.model';
+import { Notification } from '@app/models/notifications/notification.model';
+import { Order } from '@app/models/orders/order.model';
+import { GroupOrdersService } from '@app/services/group-orders/group-orders.service';
+import { NotificationsService } from '@app/services/notifications/notifications.service';
 import {
   Reservation,
   ReservationCustomer,
@@ -39,15 +47,14 @@ import { ReservationService } from '@app/services/reservation/reservation.servic
 import { TableService } from '@app/services/table/table.service';
 import { Roles } from '@app/shared/constants/roles';
 import { HeaderComponent } from '@app/shared/custom-components/header/header.component';
-import {
-  formatTime,
-  revertFormatDate,
-} from '@app/shared/helpers/date-helpers';
+import { formatTime, revertFormatDate } from '@app/shared/helpers/date-helpers';
 
 interface ReservationStatusView {
   class: string;
   label: string;
 }
+
+const NOTIFICATION_POLL_INTERVAL_MS = 15_000;
 
 @Component({
   selector: 'app-reservation-dashboard',
@@ -55,6 +62,7 @@ interface ReservationStatusView {
   imports: [
     HeaderComponent,
     RouterLink,
+    RouterOutlet,
     CardReservationComponent,
     MakeReservationComponent,
     ReservationConfirmedComponent,
@@ -65,17 +73,19 @@ interface ReservationStatusView {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ReservationDashboardComponent implements OnInit {
-  private readonly authenticationService =
-    inject(AuthenticationService);
+  private readonly authenticationService = inject(AuthenticationService);
 
-  private readonly reservationService =
-    inject(ReservationService);
+  private readonly reservationService = inject(ReservationService);
+  private readonly groupOrdersService = inject(GroupOrdersService);
 
   private readonly tableService = inject(TableService);
   private readonly locationsService = inject(LocationsService);
   private readonly ordersService = inject(PreOrdersService);
+  private readonly notificationsService = inject(NotificationsService);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
+  private returnedFromGroupOrder = false;
+  private seenNotificationIds = new Set<string>();
 
   readonly Roles = Roles;
 
@@ -86,9 +96,9 @@ export class ReservationDashboardComponent implements OnInit {
 
   readonly reservations = signal<ReservationCustomer[]>([]);
   readonly reservationsLoaded = signal(false);
+  readonly preOrdersLoaded = signal(false);
 
-  readonly selectedReservation =
-    signal<ReservationCustomer | null>(null);
+  readonly selectedReservation = signal<ReservationCustomer | null>(null);
 
   readonly selectedTable = signal<Table | null>(null);
   readonly selectedTimeRange = signal<TimeRange | null>(null);
@@ -116,38 +126,46 @@ export class ReservationDashboardComponent implements OnInit {
     },
   };
 
-  readonly selectedReservationAsReservation =
-    computed<Reservation | null>(() => {
-      const reservation = this.selectedReservation();
+  readonly selectedReservationAsReservation = computed<Reservation | null>(() => {
+    const reservation = this.selectedReservation();
 
-      if (!reservation) {
-        return null;
-      }
+    if (!reservation) {
+      return null;
+    }
 
-      return {
-        id: reservation.id,
-        tableId: reservation.tableId,
-        startTime: reservation.startTime,
-        endTime: reservation.endTime,
-        guestCount: reservation.guestCount,
-        status:
-          reservation.status as unknown as ReservationStatus,
-        waiterId: reservation.waiterId ?? '',
-        customerId:
-          reservation.customerId ?? this.customerId(),
-        locationAddress: reservation.locationAddress,
-        restaurantName: reservation.restaurantName,
-        tableCapacity:
-          this.selectedTable()?.capacity ??
-          reservation.guestCount,
-        hasSubmittedPreOrder:
-        reservation.hasSubmittedPreOrder,
-        preOrder: reservation.preOrder,
-        preOrders: reservation.preOrders,
-      };
-    });
+    return {
+      id: reservation.id,
+      tableId: reservation.tableId,
+      startTime: reservation.startTime,
+      endTime: reservation.endTime,
+      guestCount: reservation.guestCount,
+      status: reservation.status as unknown as ReservationStatus,
+      waiterId: reservation.waiterId ?? '',
+      customerId: reservation.customerId ?? this.customerId(),
+      locationAddress: reservation.locationAddress,
+      restaurantName: reservation.restaurantName,
+      tableCapacity: this.selectedTable()?.capacity ?? reservation.guestCount,
+      hasSubmittedPreOrder: reservation.hasSubmittedPreOrder,
+      preOrder: reservation.preOrder,
+      preOrders: reservation.preOrders,
+    };
+  });
 
   ngOnInit(): void {
+    this.groupOrdersService.reservationUpdates$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((update) => {
+        this.reservations.update((reservations) =>
+          reservations.map((reservation) =>
+            reservation.id !== update.reservationId
+              ? reservation
+              : update.type === 'participant-count'
+                ? { ...reservation, currentParticipants: update.count }
+                : { ...reservation, hasSubmittedPreOrder: true }
+          )
+        );
+      });
+
     const token = this.authenticationService.getToken();
     const user = this.authenticationService.getUser();
 
@@ -172,7 +190,88 @@ export class ReservationDashboardComponent implements OnInit {
     this.role.set(user.role);
     this.customerId.set(user.id);
 
+    this.router.events
+      .pipe(
+        filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe(({ urlAfterRedirects }) => {
+        const path = urlAfterRedirects.split(/[?#]/, 1)[0].replace(/\/$/, '');
+
+        if (/^\/reservations\/[^/]+\/group-order$/.test(path)) {
+          this.returnedFromGroupOrder = true;
+          return;
+        }
+
+        if (path === '/reservations' && this.returnedFromGroupOrder) {
+          this.returnedFromGroupOrder = false;
+          this.loadReservations();
+        }
+      });
+
+    timer(0, NOTIFICATION_POLL_INTERVAL_MS)
+      .pipe(
+        switchMap(() =>
+          this.notificationsService.loadNotifications().pipe(
+            tap((notifications) => this.refreshParticipantsForNewNotifications(notifications)),
+            catchError((error) => {
+              console.error('Failed to load reservation update notifications:', error);
+              return EMPTY;
+            })
+          )
+        ),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe();
+
     this.loadReservations();
+  }
+
+  hasUnreadReservationUpdates(reservationId: string): boolean {
+    return this.notificationsService
+      .unreadNotifications()
+      .some((notification) => notification.reservationId === reservationId);
+  }
+
+  private refreshParticipantsForNewNotifications(notifications: Notification[]): void {
+    if (!this.reservationsLoaded()) {
+      return;
+    }
+
+    const openGroupReservations = new Set(
+      this.reservations()
+        .filter((reservation) => reservation.guestInviteLinkAvailable)
+        .map((reservation) => reservation.id)
+    );
+    const reservationIds = new Set(
+      notifications
+        .filter(
+          (notification) =>
+            !this.seenNotificationIds.has(notification.id) &&
+            openGroupReservations.has(notification.reservationId)
+        )
+        .map((notification) => notification.reservationId)
+    );
+    this.seenNotificationIds = new Set(notifications.map((notification) => notification.id));
+
+    for (const reservationId of reservationIds) {
+      this.groupOrdersService
+        .getStatusByReservationId$(reservationId, { silent: true })
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({
+          next: (status) =>
+            this.groupOrdersService.publishParticipantCount(
+              reservationId,
+              status.currentParticipants
+            ),
+          error: (error) => {
+            console.error(
+              `Failed to refresh participant count for reservation ${reservationId}:`,
+              error
+            );
+          },
+        });
+    }
   }
 
   cancelReservation(id: string): void {
@@ -182,10 +281,7 @@ export class ReservationDashboardComponent implements OnInit {
       .subscribe({
         next: (response) => {
           if (response.error) {
-            console.error(
-              'Failed to cancel reservation:',
-              response.error,
-            );
+            console.error('Failed to cancel reservation:', response.error);
             return;
           }
 
@@ -193,12 +289,11 @@ export class ReservationDashboardComponent implements OnInit {
             reservations.map((reservation) =>
               reservation.id === id
                 ? {
-                  ...reservation,
-                  status:
-                  ReservationStatusCustomer.Cancelled,
-                }
-                : reservation,
-            ),
+                    ...reservation,
+                    status: ReservationStatusCustomer.Cancelled,
+                  }
+                : reservation
+            )
           );
 
           const selected = this.selectedReservation();
@@ -211,10 +306,7 @@ export class ReservationDashboardComponent implements OnInit {
           }
         },
         error: (error) => {
-          console.error(
-            'Failed to cancel reservation:',
-            error,
-          );
+          console.error('Failed to cancel reservation:', error);
         },
       });
   }
@@ -233,45 +325,33 @@ export class ReservationDashboardComponent implements OnInit {
           locations.find(
             (location) =>
               location.address.trim().toLowerCase() ===
-              reservation.locationAddress
-                .trim()
-                .toLowerCase(),
-          ),
+              reservation.locationAddress.trim().toLowerCase()
+          )
         ),
         switchMap((location) => {
           if (!location) {
-            console.error(
-              'Location not found:',
-              reservation.locationAddress,
-            );
+            console.error('Location not found:', reservation.locationAddress);
 
             return of(null);
           }
 
           return forkJoin({
-            timeRanges: this.tableService.getTableTimeSlots(
-              reservation.tableId,
-              date,
-              time,
-            ),
-            tables:
-              this.tableService.getAvailableTablesWithoutStartTime$(
-                {
-                  location: location.id,
-                  date: null,
-                  time: null,
-                  guests: reservation.guestCount,
-                },
-              ),
+            timeRanges: this.tableService.getTableTimeSlots(reservation.tableId, date, time),
+            tables: this.tableService.getAvailableTablesWithoutStartTime$({
+              location: location.id,
+              date: null,
+              time: null,
+              guests: reservation.guestCount,
+            }),
           }).pipe(
             map(({ timeRanges, tables }) => ({
               locationId: location.id,
               timeRanges,
               tables,
-            })),
+            }))
           );
         }),
-        takeUntilDestroyed(this.destroyRef),
+        takeUntilDestroyed(this.destroyRef)
       )
       .subscribe({
         next: (result) => {
@@ -279,40 +359,26 @@ export class ReservationDashboardComponent implements OnInit {
             return;
           }
 
-          const matchingTable = result.tables.find(
-            (table) => table.id === reservation.tableId,
-          );
+          const matchingTable = result.tables.find((table) => table.id === reservation.tableId);
 
           this.selectedTable.set({
             id: reservation.tableId,
             tableNumber:
-              matchingTable?.tableNumber ??
-              this.extractTableNumber(
-                reservation.tableName,
-              ),
-            capacity:
-              matchingTable?.capacity ??
-              reservation.guestCount,
-            locationId:
-              matchingTable?.locationId ??
-              result.locationId,
+              matchingTable?.tableNumber ?? this.extractTableNumber(reservation.tableName),
+            capacity: matchingTable?.capacity ?? reservation.guestCount,
+            locationId: matchingTable?.locationId ?? result.locationId,
             timeRanges: result.timeRanges ?? [],
           });
 
           this.selectedTimeRange.set({
-            start: new Date(
-              reservation.startTime,
-            ).toISOString(),
+            start: new Date(reservation.startTime).toISOString(),
             end: new Date(reservation.endTime).toISOString(),
           });
 
           this.showEditReservationModal.set(true);
         },
         error: (error) => {
-          console.error(
-            'Failed to load reservation editing data:',
-            error,
-          );
+          console.error('Failed to load reservation editing data:', error);
         },
       });
   }
@@ -321,10 +387,7 @@ export class ReservationDashboardComponent implements OnInit {
     this.showEditReservationModal.set(false);
   }
 
-  onSubmitEditReservation(
-    timeRange: TimeRange,
-    guests: number,
-  ): void {
+  onSubmitEditReservation(timeRange: TimeRange, guests: number): void {
     const currentReservation = this.selectedReservation();
 
     if (!currentReservation) {
@@ -332,63 +395,43 @@ export class ReservationDashboardComponent implements OnInit {
     }
 
     this.reservationService
-      .editReservation$(
-        currentReservation.id,
-        timeRange,
-        guests,
-      )
+      .editReservation$(currentReservation.id, timeRange, guests)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (updatedReservation) => {
-          const updatedCustomerReservation: ReservationCustomer =
-            {
-              ...currentReservation,
-              ...updatedReservation,
-              status:
-                updatedReservation.status as unknown as ReservationStatusCustomer,
-              restaurantName:
-                updatedReservation.restaurantName ??
-                currentReservation.restaurantName ??
-                '',
-              feedback: currentReservation.feedback,
-              preOrder: currentReservation.preOrder,
-              preOrders: currentReservation.preOrders,
-              createdByName:
-              currentReservation.createdByName,
-              createdByRole:
-              currentReservation.createdByRole,
-            };
+          const updatedCustomerReservation: ReservationCustomer = {
+            ...currentReservation,
+            ...updatedReservation,
+            status: updatedReservation.status as unknown as ReservationStatusCustomer,
+            restaurantName:
+              updatedReservation.restaurantName ?? currentReservation.restaurantName ?? '',
+            feedback: currentReservation.feedback,
+            preOrder: currentReservation.preOrder,
+            preOrders: currentReservation.preOrders,
+            createdByName: currentReservation.createdByName,
+            createdByRole: currentReservation.createdByRole,
+          };
 
           this.reservations.update((reservations) =>
             reservations.map((reservation) =>
-              reservation.id ===
-              updatedCustomerReservation.id
+              reservation.id === updatedCustomerReservation.id
                 ? updatedCustomerReservation
-                : reservation,
-            ),
+                : reservation
+            )
           );
 
-          this.selectedReservation.set(
-            updatedCustomerReservation,
-          );
+          this.selectedReservation.set(updatedCustomerReservation);
 
           this.selectedTimeRange.set({
-            start: new Date(
-              updatedCustomerReservation.startTime,
-            ).toISOString(),
-            end: new Date(
-              updatedCustomerReservation.endTime,
-            ).toISOString(),
+            start: new Date(updatedCustomerReservation.startTime).toISOString(),
+            end: new Date(updatedCustomerReservation.endTime).toISOString(),
           });
 
           this.showEditReservationModal.set(false);
           this.showEditReservationConfirmed.set(true);
         },
         error: (error) => {
-          console.error(
-            'Failed to update reservation:',
-            error,
-          );
+          console.error('Failed to update reservation:', error);
         },
       });
   }
@@ -434,126 +477,137 @@ export class ReservationDashboardComponent implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (feedback) => {
-          this.reservations.update((reservations) =>
-            reservations.map((reservation) =>
-              reservation.id === event.reservationId
-                ? {
-                  ...reservation,
-                  feedback: feedback ?? undefined,
-                }
-                : reservation,
-            ),
-          );
-
-          const selected = this.selectedReservation();
-
-          if (selected?.id === event.reservationId) {
-            this.selectedReservation.set({
-              ...selected,
-              feedback: feedback ?? undefined,
-            });
-          }
+          this.updateReservationFeedback(event.reservationId, feedback ?? undefined);
         },
         error: (error) => {
-          console.error(
-            'Failed to refresh reservation feedback:',
-            error,
-          );
+          console.error('Failed to refresh reservation feedback:', error);
         },
       });
   }
 
+  private updateReservationFeedback(
+    reservationId: string,
+    feedback: ReservationCustomer['feedback']
+  ): void {
+    this.reservations.update((reservations) =>
+      reservations.map((reservation) =>
+        reservation.id === reservationId ? { ...reservation, feedback } : reservation
+      )
+    );
+
+    const selected = this.selectedReservation();
+
+    if (selected?.id === reservationId) {
+      this.selectedReservation.set({
+        ...selected,
+        feedback,
+      });
+    }
+  }
+
   private loadReservations(): void {
-    this.reservationsLoaded.set(false);
+    let loadedOrders: Order[] | undefined;
 
-    forkJoin({
-      reservations:
-        this.reservationService.getReservationsForUser$(),
-      orders: this.ordersService.getPreOrders().pipe(
-        catchError((error) => {
-          console.error('Failed to load pre-orders:', error);
-          return of([]);
-        }),
-      ),
-    })
+    this.reservationService
+      .getReservationsForUser$()
       .pipe(
-        switchMap(({ reservations, orders }) => {
-          if (reservations.length === 0) {
-            return of<ReservationCustomer[]>([]);
-          }
-
-          return forkJoin(
-            reservations.map((reservation) =>
-              this.reservationService
-                .getReservationFeedback(reservation.id)
-                .pipe(
-                  catchError((error: HttpErrorResponse) => {
-                    if (error.status !== 404) {
-                      console.error(
-                        `Failed to load feedback for reservation ${reservation.id}:`,
-                        error,
-                      );
-                    }
-
-                    return of(null);
-                  }),
-                  map(
-                    (
-                      feedback,
-                    ): ReservationCustomer => {
-                      const preOrder = orders.find(
-                        (order) =>
-                          order.reservationId ===
-                          reservation.id,
-                      );
-
-                      const hasFeedback =
-                        feedback?.service != null ||
-                        feedback?.cuisineExperience != null;
-
-                      return {
-                        ...reservation,
-                        status:
-                          reservation.status as unknown as ReservationStatusCustomer,
-                        restaurantName:
-                          reservation.restaurantName ?? '',
-                        feedback: hasFeedback
-                          ? feedback ?? undefined
-                          : undefined,
-                        preOrder,
-                        hasSubmittedPreOrder:
-                          preOrder != null &&
-                          (preOrder.status === 1 ||
-                            preOrder.status === 3),
-                      };
-                    },
-                  ),
-                ),
-            ),
+        map((reservations) => {
+          const existingReservations = new Map(
+            this.reservations().map((reservation) => [reservation.id, reservation])
           );
+
+          return reservations.map((reservation): ReservationCustomer => {
+            const existing = existingReservations.get(reservation.id);
+
+            return {
+              ...reservation,
+              status: reservation.status as unknown as ReservationStatusCustomer,
+              restaurantName: reservation.restaurantName ?? '',
+              feedback: existing?.feedback,
+              preOrder: existing?.preOrder,
+              hasSubmittedPreOrder:
+                existing?.hasSubmittedPreOrder ?? reservation.hasSubmittedPreOrder ?? false,
+            };
+          });
         }),
         finalize(() => {
           this.reservationsLoaded.set(true);
         }),
-        takeUntilDestroyed(this.destroyRef),
+        takeUntilDestroyed(this.destroyRef)
       )
       .subscribe({
         next: (reservations) => {
-          this.reservations.set(reservations);
+          const reservationsWithOrders =
+            loadedOrders === undefined
+              ? reservations
+              : this.mergePreOrders(reservations, loadedOrders);
+          this.reservations.set(reservationsWithOrders);
+          this.loadFeedbackInBackground(reservationsWithOrders);
         },
         error: (error) => {
-          console.error(
-            'Failed to load reservations:',
-            error,
-          );
-          this.reservations.set([]);
+          console.error('Failed to load reservations:', error);
+        },
+      });
+
+    this.ordersService
+      .getPreOrders()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (orders) => {
+          loadedOrders = orders;
+          this.preOrdersLoaded.set(true);
+          this.reservations.update((reservations) => this.mergePreOrders(reservations, orders));
+        },
+        error: (error) => {
+          console.error('Failed to load reservation pre-orders:', error);
+          this.preOrdersLoaded.set(true);
         },
       });
   }
 
-  private extractTableNumber(
-    tableName: string | undefined,
-  ): number {
+  private mergePreOrders(
+    reservations: ReservationCustomer[],
+    orders: Order[]
+  ): ReservationCustomer[] {
+    const ordersByReservationId = new Map(orders.map((order) => [order.reservationId, order]));
+
+    return reservations.map((reservation) => {
+      const preOrder = ordersByReservationId.get(reservation.id);
+
+      return {
+        ...reservation,
+        preOrder,
+        hasSubmittedPreOrder: preOrder != null && (preOrder.status === 1 || preOrder.status === 3),
+      };
+    });
+  }
+
+  private loadFeedbackInBackground(reservations: ReservationCustomer[]): void {
+    reservations.forEach((reservation) => {
+      this.reservationService
+        .getReservationFeedback(reservation.id)
+        .pipe(
+          catchError((error: HttpErrorResponse) => {
+            if (error.status !== 404) {
+              console.error(`Failed to load feedback for reservation ${reservation.id}:`, error);
+            }
+
+            return EMPTY;
+          }),
+          takeUntilDestroyed(this.destroyRef)
+        )
+        .subscribe((feedback) => {
+          const hasFeedback = feedback?.service != null || feedback?.cuisineExperience != null;
+
+          this.updateReservationFeedback(
+            reservation.id,
+            hasFeedback ? (feedback ?? undefined) : undefined
+          );
+        });
+    });
+  }
+
+  private extractTableNumber(tableName: string | undefined): number {
     const match = tableName?.match(/\d+/);
     return match ? Number(match[0]) : 0;
   }

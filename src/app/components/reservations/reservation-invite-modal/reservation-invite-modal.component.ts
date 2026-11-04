@@ -12,7 +12,10 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
-import { Reservation } from '@app/models/reservations/reservation.model';
+import {
+  Reservation,
+  ReservationCustomer,
+} from '@app/models/reservations/reservation.model';
 import { GuestInviteService } from '@app/services/reservation/guest-invite.service';
 import { ToastService } from '@app/services/toast/toast.service';
 import { ModalComponent } from '@app/shared/custom-components/modal/modal.component';
@@ -32,7 +35,8 @@ export class ReservationInviteModalComponent implements OnInit {
   private readonly guestInviteService = inject(GuestInviteService);
   private readonly destroyRef = inject(DestroyRef);
 
-  readonly reservation = input.required<Reservation>();
+  readonly reservation = input.required<Reservation | ReservationCustomer>();
+  readonly inviteOnly = input(false);
 
   readonly closed = output<void>();
 
@@ -106,6 +110,24 @@ export class ReservationInviteModalComponent implements OnInit {
 
   onMakePreOrder(): void {
     this.closed.emit();
-    this.router.navigate(['/menu']);
+    const res = this.reservation();
+    const startTime = new Date(res.startTime);
+    const endTime = new Date(res.endTime);
+
+    const location = (res as any).locationAddress || 'Restaurant';
+    const tableLabel = (res as any).tableName || `Table ${res.tableId}`;
+
+    const queryParams = {
+      preOrder: 'true',
+      reservationId: res.id,
+      reservationLabel: [
+        location,
+        tableLabel,
+        startTime.toDateString(),
+        `${startTime.toLocaleTimeString()} - ${endTime.toLocaleTimeString()}`,
+      ].join(', '),
+    };
+
+    void this.router.navigate(['/menu'], { queryParams });
   }
 }

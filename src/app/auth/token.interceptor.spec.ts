@@ -12,10 +12,11 @@ describe('tokenInterceptor', () => {
   let http: HttpClient;
   let httpMock: HttpTestingController;
   let toastService: jasmine.SpyObj<ToastService>;
+  let authService: jasmine.SpyObj<AuthenticationService>;
 
   beforeEach(() => {
     toastService = jasmine.createSpyObj<ToastService>('ToastService', ['error']);
-    const authService = jasmine.createSpyObj<AuthenticationService>('AuthenticationService', [
+    authService = jasmine.createSpyObj<AuthenticationService>('AuthenticationService', [
       'getTokens',
     ]);
     authService.getTokens.and.returnValue(null);
@@ -59,5 +60,52 @@ describe('tokenInterceptor', () => {
 
     expect(toastService.error).not.toHaveBeenCalled();
     expect(receivedStatus).toBe(400);
+  });
+
+  it('adds the Cognito token to the owner group dish update request', () => {
+    authService.getTokens.and.returnValue({ idToken: 'test-id-token', accessToken: 'test-access-token' });
+    const url = 'https://test.api/guest/groups/group-1/sessions/guest-1/dishes';
+
+    http.patch(url, { dishId: 'dish-1', quantity: 0 }).subscribe();
+
+    const request = httpMock.expectOne(url);
+    expect(request.request.headers.get('Authorization')).toBe('Bearer test-id-token');
+    request.flush({});
+  });
+
+  it('leaves invalid guest cart mutation messaging to the guest page', () => {
+    const url = 'https://test.api/guest/sessions/session-1/dishes';
+    http.post(url, {}).subscribe({ error: () => undefined });
+
+    httpMock
+      .expectOne(url)
+      .flush({ error: 'Invalid guest session token' }, { status: 401, statusText: 'Unauthorized' });
+
+    expect(toastService.error).not.toHaveBeenCalled();
+  });
+
+  it('leaves invalid guest submit messaging to the guest page', () => {
+    const url = 'https://test.api/guest/sessions/session-1/submit';
+    http.post(url, {}).subscribe({ error: () => undefined });
+
+    httpMock
+      .expectOne(url)
+      .flush({ error: 'Invalid guest session token' }, { status: 401, statusText: 'Unauthorized' });
+
+    expect(toastService.error).not.toHaveBeenCalled();
+  });
+
+  it('keeps the session-expired toast for other guest requests', () => {
+    const url = 'https://test.api/guest/sessions/session-1/menu';
+    http.get(url).subscribe({ error: () => undefined });
+
+    httpMock
+      .expectOne(url)
+      .flush({ error: 'Invalid guest session token' }, { status: 401, statusText: 'Unauthorized' });
+
+    expect(toastService.error).toHaveBeenCalledWith(
+      'Session expired. Please re-open the invite link.',
+      'Unauthorized'
+    );
   });
 });

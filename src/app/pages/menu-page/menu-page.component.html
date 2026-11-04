@@ -1,4 +1,13 @@
 <div class="menu-container">
+  <section class="info-section">
+    @if (isPreOrderEnabled) {
+      <div class="pre-order-notice">
+        You are making a pre-order for a reservation <strong> {{ preOrderReservationLabel }}</strong
+        >
+      </div>
+    }
+  </section>
+
   <div class="page-navigation">
     <a routerLink="/main">Main page</a>
     <span>></span>
@@ -16,15 +25,6 @@
       <p class="hero-subtitle">Green & Tasty Restaurants</p>
       <h1 class="hero-title">Menu</h1>
     </div>
-  </section>
-
-  <section class="info-section">
-    @if (isPreOrderEnabled) {
-      <div class="pre-order-notice">
-        You are making a pre-order for a reservation <strong>{{ preOrderReservationLabel }}</strong
-        >.
-      </div>
-    }
   </section>
 
   <section class="content-sections">

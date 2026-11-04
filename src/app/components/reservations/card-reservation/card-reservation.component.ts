@@ -18,6 +18,7 @@ import {
 import { PlaceOrderWaiterComponent } from '@app/components/place-order-waiter/place-order-waiter.component';
 import { Roles } from '@app/shared/constants/roles';
 import { CustomSelectComponent } from '@app/shared/custom-components/custom-select/custom-select.component';
+import { ReservationInviteModalComponent } from '@app/components/reservations/reservation-invite-modal/reservation-invite-modal.component';
 
 interface ReservationStatusView {
   class: string;
@@ -38,6 +39,7 @@ interface WaiterPreOrderNavigationData {
     DatePipe,
     CustomSelectComponent,
     PlaceOrderWaiterComponent,
+    ReservationInviteModalComponent,
   ],
   templateUrl: './card-reservation.component.html',
   styleUrl: './card-reservation.component.scss',
@@ -50,20 +52,19 @@ export class CardReservationComponent {
 
   readonly r = input.required<ReservationCustomer>();
   readonly role = input<string>(Roles.CUSTOMER);
-  readonly statusEnum =
-    input<Record<number, ReservationStatusView>>({});
+  readonly statusEnum = input<Record<number, ReservationStatusView>>({});
+  readonly hasUnreadReservationUpdates = input(false);
+  readonly preOrderStatusLoaded = input(true);
 
   readonly availableTableOptions = input<string[]>([]);
 
-  readonly availableTableOptionsMap =
-    input<Map<string, string>>(new Map<string, string>());
+  readonly availableTableOptionsMap = input<Map<string, string>>(new Map<string, string>());
 
   readonly selectedTableLabel = input('');
 
   readonly createdByName = input<string | undefined>();
 
-  readonly createdByRole =
-    input<ReservationCustomer['createdByRole']>();
+  readonly createdByRole = input<ReservationCustomer['createdByRole']>();
   readonly tableChanged = output<{
     reservationId: string;
     newTableId: string;
@@ -71,20 +72,15 @@ export class CardReservationComponent {
 
   readonly cancelReservation = output<string>();
 
-  readonly editReservation =
-    output<ReservationCustomer>();
+  readonly editReservation = output<ReservationCustomer>();
 
-  readonly postponeReservation =
-    output<ReservationCustomer>();
+  readonly postponeReservation = output<ReservationCustomer>();
 
-  readonly leaveFeedbackReservation =
-    output<ReservationCustomer>();
+  readonly leaveFeedbackReservation = output<ReservationCustomer>();
 
-  readonly updateFeedbackReservation =
-    output<ReservationCustomer>();
+  readonly updateFeedbackReservation = output<ReservationCustomer>();
 
-  readonly sendAnonymousFeedback =
-    output<ReservationCustomer>();
+  readonly sendAnonymousFeedback = output<ReservationCustomer>();
 
   readonly statusChanged = output<{
     id: string;
@@ -93,6 +89,7 @@ export class CardReservationComponent {
 
   readonly preOrder = output<CreateOrderRequest>();
   readonly showWaiterOrderModal = signal(false);
+  readonly showInviteModal = signal(false);
 
   readonly statusView = computed<ReservationStatusView>(() => {
     const reservation = this.r();
@@ -110,30 +107,40 @@ export class CardReservationComponent {
   });
 
   readonly creatorName = computed(() => {
-    return (
-      this.createdByName() ||
-      this.r().createdByName ||
-      'Unknown'
-    );
+    return this.createdByName() || this.r().createdByName || 'Unknown';
   });
 
   readonly creatorRole = computed(() => {
-    return (
-      this.createdByRole() ||
-      this.r().createdByRole ||
-      Roles.CUSTOMER
-    );
+    return this.createdByRole() || this.r().createdByRole || Roles.CUSTOMER;
   });
 
   readonly preOrderItemCount = computed(() => {
     return this.r().preOrder?.orderItems?.length ?? 0;
   });
 
-  readonly canOpenWaiterPreOrder = computed(() => {
+  readonly canOpenGroupPreOrder = computed(() => {
+    return this.role() === Roles.CUSTOMER && this.r().guestCount >= 2;
+  });
+
+  readonly canInviteGuests = computed(() => {
+    const status = this.r().status;
     return (
-      this.preOrderItemCount() > 0 ||
-      this.creatorRole() === Roles.WAITER
+      this.role() === Roles.CUSTOMER &&
+      this.preOrderStatusLoaded() &&
+      !this.r().hasSubmittedPreOrder &&
+      this.r().guestCount >= 2 &&
+      (status === ReservationStatusCustomer.Reserved ||
+        status === ReservationStatusCustomer.InProgress)
     );
+  });
+
+  readonly inviteGuestsFull = computed(() => {
+    const currentParticipants = this.r().currentParticipants;
+    return currentParticipants != null && currentParticipants >= this.r().guestCount;
+  });
+
+  readonly canOpenWaiterPreOrder = computed(() => {
+    return this.preOrderItemCount() > 0 || this.creatorRole() === Roles.WAITER;
   });
 
   readonly isAnonymous = computed(() => {
@@ -143,10 +150,7 @@ export class CardReservationComponent {
   readonly hasFullFeedback = computed(() => {
     const feedback = this.r().feedback;
 
-    return (
-      feedback?.cuisineExperience != null &&
-      feedback?.service != null
-    );
+    return feedback?.cuisineExperience != null && feedback?.service != null;
   });
 
   onPreOrder(): void {
@@ -154,9 +158,7 @@ export class CardReservationComponent {
     const startTime = new Date(reservation.startTime);
     const endTime = new Date(reservation.endTime);
 
-    const tableLabel =
-      reservation.tableName ||
-      `Table ${reservation.tableId}`;
+    const tableLabel = reservation.tableName || `Table ${reservation.tableId}`;
 
     const queryParams: Params = {
       preOrder: 'true',
@@ -173,6 +175,21 @@ export class CardReservationComponent {
       queryParams,
     });
   }
+
+  onGroupPreOrder(): void {
+    void this.router.navigate(['/reservations', this.r().id, 'group-order']);
+  }
+
+  onInviteGuests(): void {
+    if (this.canInviteGuests() && !this.inviteGuestsFull()) {
+      this.showInviteModal.set(true);
+    }
+  }
+
+  closeInviteModal(): void {
+    this.showInviteModal.set(false);
+  }
+
   onPreOrderWaiter(): void {
     if (this.preOrderItemCount() > 0) {
       this.navigateToWaiterPreOrder();
@@ -195,8 +212,7 @@ export class CardReservationComponent {
 
   onTableChange(label: string): void {
     const reservation = this.r();
-    const newTableId =
-      this.availableTableOptionsMap().get(label);
+    const newTableId = this.availableTableOptionsMap().get(label);
 
     if (!newTableId || newTableId === reservation.tableId) {
       return;
@@ -208,9 +224,7 @@ export class CardReservationComponent {
     });
   }
 
-  onStatusChange(
-    newStatus: ReservationStatusCustomer,
-  ): void {
+  onStatusChange(newStatus: ReservationStatusCustomer): void {
     this.statusChanged.emit({
       id: this.r().id,
       newStatus,
@@ -227,10 +241,7 @@ export class CardReservationComponent {
       tableName: reservation.tableName || 'Unknown table',
     };
 
-    sessionStorage.setItem(
-      'waiterPreOrderData',
-      JSON.stringify(navigationData),
-    );
+    sessionStorage.setItem('waiterPreOrderData', JSON.stringify(navigationData));
 
     void this.router.navigate(['/waiter-pre-order'], {
       state: navigationData,

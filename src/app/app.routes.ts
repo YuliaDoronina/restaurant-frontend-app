@@ -35,6 +35,15 @@ export const routes: Routes = [
     component: ReservationDashboardComponent,
     canActivate: [AuthGuard],
     data: { authorized: true },
+    children: [
+      {
+        path: ':reservationId/group-order',
+        canActivate: [AuthGuard],
+        data: { authorized: true },
+        loadComponent: () =>
+          import('./pages/group-order-page/group-order-page.component').then((m) => m.GroupOrderPageComponent),
+      },
+    ],
   },
   {
     path: 'waiter-reservations',
