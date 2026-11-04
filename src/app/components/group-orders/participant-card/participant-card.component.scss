@@ -103,6 +103,11 @@
   color: color.$red-400;
 }
 
+.dish-remove:disabled {
+  color: color.$neutral-400;
+  cursor: not-allowed;
+}
+
 .dish-remove svg {
   width: 20px;
   height: 20px;

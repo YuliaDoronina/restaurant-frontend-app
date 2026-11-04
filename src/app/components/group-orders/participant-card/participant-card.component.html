@@ -30,7 +30,7 @@
             <button
               type="button"
               class="dish-remove"
-              [disabled]="dishUpdateInProgress()"
+              [disabled]="!canEditParticipantDishes() || dishUpdateInProgress()"
               [attr.aria-label]="'Remove ' + item.dish.name"
               (click)="removeDish.emit(item.dish.id)"
             >
@@ -70,7 +70,7 @@
               <button
                 type="button"
                 class="quantity-button quantity-increase"
-                [disabled]="dishUpdateInProgress()"
+                [disabled]="!canEditParticipantDishes() || dishUpdateInProgress()"
                 [attr.aria-label]="'Increase ' + item.dish.name + ' quantity'"
                 (click)="quantityChange.emit({ dishId: item.dish.id, change: 1 })"
               >

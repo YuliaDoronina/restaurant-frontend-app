@@ -1,6 +1,62 @@
-import { addMinutesIso, findClosestDuration, minutesBetween } from './date-helpers';
+import {
+  addAndRoundBookingTime,
+  addMinutesIso,
+  findClosestDuration,
+  formatTime,
+  generateTimeOptions,
+  minutesBetween,
+} from './date-helpers';
 
 describe('date-helpers', () => {
+  describe('generateTimeOptions', () => {
+    it('rounds up when the 30-minute threshold falls just after a slot boundary', () => {
+      jasmine.clock().install();
+      const now = new Date(2026, 9, 17, 10, 0, 1);
+      jasmine.clock().mockDate(now);
+      const date = now.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      });
+
+      try {
+        const options = generateTimeOptions(date);
+
+        expect(options[0]).toBe('11:00');
+        expect(options).not.toContain('10:30');
+      } finally {
+        jasmine.clock().uninstall();
+      }
+    });
+
+    it('allows a slot exactly 30 minutes ahead', () => {
+      jasmine.clock().install();
+      const now = new Date(2026, 9, 17, 10, 0, 0);
+      jasmine.clock().mockDate(now);
+      const date = now.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      });
+
+      try {
+        const options = generateTimeOptions(date);
+
+        expect(options[0]).toBe('10:30');
+      } finally {
+        jasmine.clock().uninstall();
+      }
+    });
+  });
+
+  describe('addAndRoundBookingTime', () => {
+    it('rounds a 30-minute lead time up to a 15-minute boundary', () => {
+      const start = new Date(2026, 9, 17, 10, 0, 1).toISOString();
+
+      expect(formatTime(addAndRoundBookingTime(start))).toBe('10:45');
+    });
+  });
+
   describe('addMinutesIso', () => {
     const cases: { name: string; input: string; minutes: number; expected: string }[] = [
       {

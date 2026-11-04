@@ -24,6 +24,10 @@ export class ParticipantCardComponent {
   readonly removeDish = output<string>();
   readonly quantityChange = output<ParticipantDishQuantityChange>();
 
+  readonly canEditParticipantDishes = computed(
+    () => this.canEdit() && (this.participant().type === 'Owner' || this.participant().isSubmitted),
+  );
+
   readonly title = computed(() => {
     const person = this.participant();
     if (this.isMe()) return 'My Pre-Order';

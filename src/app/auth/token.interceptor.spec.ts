@@ -12,10 +12,11 @@ describe('tokenInterceptor', () => {
   let http: HttpClient;
   let httpMock: HttpTestingController;
   let toastService: jasmine.SpyObj<ToastService>;
+  let authService: jasmine.SpyObj<AuthenticationService>;
 
   beforeEach(() => {
     toastService = jasmine.createSpyObj<ToastService>('ToastService', ['error']);
-    const authService = jasmine.createSpyObj<AuthenticationService>('AuthenticationService', [
+    authService = jasmine.createSpyObj<AuthenticationService>('AuthenticationService', [
       'getTokens',
     ]);
     authService.getTokens.and.returnValue(null);
@@ -59,5 +60,16 @@ describe('tokenInterceptor', () => {
 
     expect(toastService.error).not.toHaveBeenCalled();
     expect(receivedStatus).toBe(400);
+  });
+
+  it('adds the Cognito token to the owner group dish update request', () => {
+    authService.getTokens.and.returnValue({ idToken: 'test-id-token', accessToken: 'test-access-token' });
+    const url = 'https://test.api/guest/groups/group-1/sessions/guest-1/dishes';
+
+    http.patch(url, { dishId: 'dish-1', quantity: 0 }).subscribe();
+
+    const request = httpMock.expectOne(url);
+    expect(request.request.headers.get('Authorization')).toBe('Bearer test-id-token');
+    request.flush({});
   });
 });

@@ -64,4 +64,5 @@ describe('Практичне · картка учасника', () => {
       expect(render({ ...OLENA, isSubmitted: true }).textContent).toContain('Submitted');
     });
   });
+
 });

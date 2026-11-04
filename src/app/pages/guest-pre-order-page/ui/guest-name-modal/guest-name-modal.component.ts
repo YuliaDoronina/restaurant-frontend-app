@@ -14,6 +14,7 @@ import { GuestInviteVm } from '../../state/guest-preorder.store';
 })
 export class GuestNameModalComponent {
     readonly invite = input<GuestInviteVm | null>(null);
+    readonly joinError = input<string | null>(null);
 
     readonly confirmed = output<string>();
     readonly closed = output<void>(); // x / esc / backdrop (we'll ignore this on the page)

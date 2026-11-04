@@ -3,6 +3,9 @@
 
 .menu-container {
   background-color: color.$neutral-100;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 // ✅ HERO SECTION (added block)

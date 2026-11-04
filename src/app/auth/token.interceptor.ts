@@ -22,7 +22,8 @@ export const tokenInterceptor: HttpInterceptorFn = (
   const requestPath = req.url.split('?')[0];
   const isOwnerGroupSessionsRequest =
     (req.method === 'GET' && /\/guest\/groups\/[^/]+\/sessions$/.test(requestPath)) ||
-    (req.method === 'DELETE' && /\/guest\/groups\/[^/]+\/sessions\/[^/]+$/.test(requestPath));
+    (req.method === 'DELETE' && /\/guest\/groups\/[^/]+\/sessions\/[^/]+$/.test(requestPath)) ||
+    (req.method === 'PATCH' && /\/guest\/groups\/[^/]+\/sessions\/[^/]+\/dishes$/.test(requestPath));
 
   if (req.url.includes('/guest/') && !isOwnerGroupSessionsRequest) {
     return next(req).pipe(

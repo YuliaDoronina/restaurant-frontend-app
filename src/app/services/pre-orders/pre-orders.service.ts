@@ -80,6 +80,19 @@ export class PreOrdersService {
     return this.http.put(`${this.baseUrl}/orders/${reservationId}`, { orderItems });
   }
 
+  updateOrderItemsByReservationId(
+    reservationId: string,
+    orderItems: Array<{ dishId: string; quantity: number }>
+  ) {
+    if (orderItems.length === 0) {
+      return this.cancelPreOrderByReservationId(reservationId);
+    }
+
+    return this.http.put(`${this.baseUrl}/orders/${encodeURIComponent(reservationId)}`, {
+      orderItems,
+    });
+  }
+
   cancelPreOrderByReservationId(reservationId: string) {
     return this.http.delete(`${this.baseUrl}/orders/${reservationId}`);
   }

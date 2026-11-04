@@ -14,9 +14,10 @@ const OLENA: Participant = {
 };
 const OWNER: Participant = { id: 'owner', type: 'Owner', name: 'Yevhenii', isSubmitted: true, total: 0, items: [] };
 
-function render(participant: Participant): HTMLElement {
+function render(participant: Participant, canEdit = false): HTMLElement {
   const fixture = TestBed.createComponent(ParticipantCardComponent);
   fixture.componentRef.setInput('participant', participant); // так у тесті передаємо input
+  fixture.componentRef.setInput('canEdit', canEdit);
   fixture.detectChanges();
   return fixture.nativeElement as HTMLElement;
 }
@@ -62,6 +63,34 @@ describe('Практичне · картка учасника', () => {
 
     it('«Submitted», якщо підтверджений', () => {
       expect(render({ ...OLENA, isSubmitted: true }).textContent).toContain('Submitted');
+    });
+  });
+
+  describe('крок 5 · редагування страв', () => {
+    it('вимикає видалення та збільшення для гостя зі статусом «Still choosing»', () => {
+      const card = render(OLENA, true);
+      const removeButton = card.querySelector<HTMLButtonElement>('.dish-remove')!;
+      const increaseButton = card.querySelector<HTMLButtonElement>('.quantity-increase')!;
+
+      expect(removeButton.disabled).toBeTrue();
+      expect(increaseButton.disabled).toBeTrue();
+      expect(card.querySelector<HTMLButtonElement>('.quantity-button:not(.quantity-increase)')?.disabled).toBeFalse();
+      expect(getComputedStyle(removeButton).color).toBe(getComputedStyle(increaseButton).color);
+      expect(getComputedStyle(removeButton).cursor).toBe(getComputedStyle(increaseButton).cursor);
+    });
+
+    it('дозволяє видалення та збільшення для гостя зі статусом «Submitted»', () => {
+      const card = render({ ...OLENA, isSubmitted: true }, true);
+
+      expect(card.querySelector<HTMLButtonElement>('.dish-remove')?.disabled).toBeFalse();
+      expect(card.querySelector<HTMLButtonElement>('.quantity-increase')?.disabled).toBeFalse();
+    });
+
+    it('дозволяє власнику редагувати власні страви', () => {
+      const card = render({ ...OWNER, items: OLENA.items }, true);
+
+      expect(card.querySelector<HTMLButtonElement>('.dish-remove')?.disabled).toBeFalse();
+      expect(card.querySelector<HTMLButtonElement>('.quantity-increase')?.disabled).toBeFalse();
     });
   });
 });

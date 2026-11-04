@@ -5,6 +5,8 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, convertToParamMap } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { GroupOrdersService } from '@app/services/group-orders/group-orders.service';
+import { NotificationsService } from '@app/services/notifications/notifications.service';
+import { PreOrdersService } from '@app/services/pre-orders/pre-orders.service';
 import { ToastService } from '@app/services/toast/toast.service';
 import { GroupSessionsResponse } from '@app/models/group-orders/group-sessions-response.model';
 import { GuestInvite } from '@app/models/reservations/guest-invite.model';
@@ -15,16 +17,37 @@ const caesar = { id: 'dish1', name: 'Caesar Salad', price: 180 };
 const tomYum = { id: 'dish2', name: 'Tom Yum', price: 220 };
 const SESSIONS: GroupSessionsResponse = {
   participants: [
-    { id: 'owner', type: 'Owner', name: 'Yevhenii', isSubmitted: true, total: 180, items: [{ dish: caesar, quantity: 1 }] },
-    { id: 'olena', type: 'Guest', name: 'Olena', isSubmitted: false, total: 220, items: [{ dish: tomYum, quantity: 1 }] },
+    {
+      id: 'owner',
+      type: 'Owner',
+      name: 'Yevhenii',
+      isSubmitted: true,
+      total: 180,
+      items: [{ dish: caesar, quantity: 1 }],
+    },
+    {
+      id: 'olena',
+      type: 'Guest',
+      name: 'Olena',
+      isSubmitted: false,
+      total: 220,
+      items: [{ dish: tomYum, quantity: 1 }],
+    },
   ],
   total: 400,
 };
-const INVITE = { GroupReservationId: 'grp-1', LocationAddress: 'Rustaveli Avenue 48', MaxGuestCount: 5,
-  StartTime: '2026-10-21T16:00:00Z', EndTime: '2026-10-21T17:30:00Z' } as GuestInvite;
+const INVITE = {
+  GroupReservationId: 'grp-1',
+  LocationAddress: 'Rustaveli Avenue 48',
+  MaxGuestCount: 5,
+  StartTime: '2026-10-21T16:00:00Z',
+  EndTime: '2026-10-21T17:30:00Z',
+} as GuestInvite;
 
 function buttonByText(root: ParentNode, text: string): HTMLButtonElement | undefined {
-  return [...root.querySelectorAll('button')].find((b) => b.textContent?.trim() === text) as HTMLButtonElement | undefined;
+  return [...root.querySelectorAll('button')].find((b) => b.textContent?.trim() === text) as
+    | HTMLButtonElement
+    | undefined;
 }
 
 describe('Рівень 3 · синхронізація', () => {
@@ -35,8 +58,22 @@ describe('Рівень 3 · синхронізація', () => {
       imports: [GroupOrderPageComponent],
       providers: [
         { provide: GroupOrdersService, useValue: service },
-        { provide: ToastService, useValue: jasmine.createSpyObj('ToastService', ['success', 'error', 'info']) },
-        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: convertToParamMap({ reservationId: 'res-1' }) } } },
+        {
+          provide: NotificationsService,
+          useValue: { markReservationNotificationsAsRead: () => of(void 0) },
+        },
+        {
+          provide: PreOrdersService,
+          useValue: jasmine.createSpyObj('PreOrdersService', ['updateOrderItemsByReservationId']),
+        },
+        {
+          provide: ToastService,
+          useValue: jasmine.createSpyObj('ToastService', ['success', 'error', 'info']),
+        },
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { paramMap: convertToParamMap({ reservationId: 'res-1' }) } },
+        },
       ],
     });
     const fixture = TestBed.createComponent(GroupOrderPageComponent);
@@ -46,12 +83,18 @@ describe('Рівень 3 · синхронізація', () => {
 
   beforeEach(() => {
     service = jasmine.createSpyObj<GroupOrdersService>('GroupOrdersService', [
-      'getGroupInvite$', 'getSessions$', 'getOwnerSessionId$', 'getStatus$', 'submit$',
+      'getGroupInvite$',
+      'getSessions$',
+      'getOwnerSessionId$',
+      'getStatus$',
+      'submit$',
     ]);
     service.getGroupInvite$.and.returnValue(of(INVITE));
     service.getSessions$.and.returnValue(of(structuredClone(SESSIONS)));
     service.getOwnerSessionId$.and.returnValue(of('owner'));
-    service.getStatus$.and.returnValue(of({ currentParticipants: 2, maxCapacity: 5, status: 'Open' as const }));
+    service.getStatus$.and.returnValue(
+      of({ currentParticipants: 2, maxCapacity: 5, status: 'Open' as const })
+    );
   });
 
   it('кожні 15 с підтягує свіжі кошики — без перезавантаження сторінки', fakeAsync(() => {
@@ -72,7 +115,10 @@ describe('Рівень 3 · синхронізація', () => {
   it('фонові запити тихі: { silent: true }', fakeAsync(() => {
     create();
     tick(SYNC_MS);
-    expect(service.getSessions$.calls.mostRecent().args).toEqual(['grp-1', jasmine.objectContaining({ silent: true })]);
+    expect(service.getSessions$.calls.mostRecent().args).toEqual([
+      'grp-1',
+      jasmine.objectContaining({ silent: true }),
+    ]);
     discardPeriodicTasks();
   }));
 
@@ -97,6 +143,9 @@ describe('Рівень 3 · синхронізація', () => {
   }));
 
   it('після Submit синхронізація зупиняється', fakeAsync(() => {
+    const allSubmitted = structuredClone(SESSIONS);
+    allSubmitted.participants.forEach((participant) => (participant.isSubmitted = true));
+    service.getSessions$.and.returnValue(of(allSubmitted));
     service.submit$.and.returnValue(of([{ dishId: 'dish1', quantity: 1 }]));
     const { fixture, element } = create();
     buttonByText(element, 'Submit Pre-Order')?.click();

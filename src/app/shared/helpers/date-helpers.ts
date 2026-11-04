@@ -14,6 +14,8 @@ export function formatDate(dateStr: string): string {
   });
 }
 
+export const MINIMUM_RESERVATION_LEAD_TIME_MINUTES = 30;
+
 export function revertFormatTime(timeStr: string, dateStr: string): string {
   const [time, period = ''] = timeStr.trim().split(' ');
   const [parsedHour, minute] = time.split(':').map(Number);
@@ -78,33 +80,23 @@ export function generateTimeOptions(date: string): string[] {
   if (!isToday) {
     return generateTimeOptionsForDay('10:00', '22:00');
   }
-  let hours = now.getHours();
-  let minutes = now.getMinutes();
-  const moreThan45Minutes = minutes >= 45;
-  const moreThan15Minutes = minutes >= 15 && minutes < 45;
-  const moreThan0Minutes = minutes >= 0 && minutes < 15;
-
-  // Since reservations can only be made 15 minutes in advance,
-  // we adjust the current time to the next half hour if it's less than 15 minutes
-  if (moreThan45Minutes) {
-    minutes = 30;
-    hours += 1;
-  } else if (moreThan15Minutes) {
-    minutes = 0;
-    hours += 1;
-  } else if (moreThan0Minutes) {
-    minutes = 30;
-  }
+  const earliestStart = new Date(
+    now.getTime() + MINIMUM_RESERVATION_LEAD_TIME_MINUTES * 60_000
+  );
+  const earliestMinute =
+    earliestStart.getHours() * 60 +
+    earliestStart.getMinutes() +
+    (earliestStart.getSeconds() > 0 || earliestStart.getMilliseconds() > 0 ? 1 : 0);
+  const roundedStartMinute = Math.ceil(earliestMinute / 30) * 30;
+  const hours = Math.floor(roundedStartMinute / 60);
+  const minutes = roundedStartMinute % 60;
 
   if (hours >= 22) {
     return [];
   }
 
-  const startHours = new Date(1, 1, 1, hours, minutes, 0, 0);
-  const endHours = new Date(1, 1, 1, 22, 0, 0, 0);
-  const formattedStart = formatTime(startHours.toISOString());
-  const formattedEnd = formatTime(endHours.toISOString());
-  return generateTimeOptionsForDay(formattedStart, formattedEnd);
+  const formattedStart = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  return generateTimeOptionsForDay(formattedStart, '22:00');
 }
 
 function generateTimeOptionsForDay(startTime: string, endTime: string): string[] {
@@ -171,15 +163,20 @@ export function parseToISO(dateStr: string, timeStr: string): string {
 
 export function addAndRoundBookingTime(
   timeStr: string,
-  bookingMinutes = 15,
+  bookingMinutes = MINIMUM_RESERVATION_LEAD_TIME_MINUTES,
   roundStep = 15
 ): string {
   const date = new Date(timeStr);
-  const totalMinutes = date.getMinutes() + bookingMinutes;
-  date.setMinutes(totalMinutes);
+  date.setMinutes(date.getMinutes() + bookingMinutes);
 
-  const roundedMinutes = Math.ceil(date.getMinutes() / roundStep) * roundStep;
-  date.setMinutes(roundedMinutes);
+  const minuteRemainder = date.getMinutes() % roundStep;
+  const minutesToAdd = (roundStep - minuteRemainder) % roundStep;
+  const hasPartialMinute = date.getSeconds() > 0 || date.getMilliseconds() > 0;
+  date.setMinutes(
+    date.getMinutes() + minutesToAdd + (hasPartialMinute && minutesToAdd === 0 ? roundStep : 0),
+    0,
+    0
+  );
 
   return date.toISOString();
 }

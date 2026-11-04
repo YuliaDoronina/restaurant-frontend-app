@@ -24,6 +24,9 @@
         @if (touched() && !valid()) {
         <div class="error">Name is required</div>
         }
+        @if (joinError()) {
+        <div class="error" role="alert">{{ joinError() }}</div>
+        }
     </div>
 
     <div modal-actions class="actions">
